@@ -1,0 +1,7 @@
+build/*
+.vscode
+.idea
+/repository/datasets
+repository/src/CMakeFiles
+*.txt
+*.a

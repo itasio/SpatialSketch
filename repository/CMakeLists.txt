@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 project(grid)
 
 set(CMAKE_CXX_FLAGS "-std=c++2a -Wall -Werror -Wunused -Wunused-value -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-write-strings -Wno-maybe-uninitialized -Wno-narrowing -Wno-reorder -Wno-deprecated-declarations")
-string(APPEND CMAKE_CXX_FLAGS " -O3") # optimizer
+#string(APPEND CMAKE_CXX_FLAGS " -O3") # optimizer
 #string(APPEND CMAKE_CXX_FLAGS " -pg") # gprof profiler
 
 # Postgresql C++

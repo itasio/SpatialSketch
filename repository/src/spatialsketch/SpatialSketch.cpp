@@ -70,17 +70,21 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
         }
     } else {
         grids_.reserve(levels_*levels_);
+
         for (int x_pow = 0; x_pow < levels_; x_pow++) {
             for (int y_pow = 0; y_pow < levels_; y_pow++) {
                 int x_dim = std::pow(2,x_pow);
                 int y_dim = std::pow(2,y_pow);
                 grid *g = new grid(x_dim, y_dim);
                 grids_[DimToKey(x_dim, y_dim)] = g;
+                
+                std::cout << "Grid created with dims: " << x_dim << "," << y_dim <<std::endl;
 
                 // Grid without initialized sketches is 2d array of null pointers
                 current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
             }
         }
+        std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
     }
 
     //SetupTopLevelIntervals(n_);
@@ -360,6 +364,10 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
         if (grid_ptr != grids_.end()) {
             int x_cell = x1/(x2-x1+1);
             int y_cell = y1/(y2-y1+1);
+
+            std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
+             " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
+
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {
                 if (sketch_name_ == "CM" || sketch_name_ == "CML2") {
                     grid_ptr->second->cells[x_cell][y_cell] = new CountMin(epsilon_, delta_, hash_coeffs_);
@@ -567,9 +575,9 @@ void SpatialSketch::Update(int x, int y, long item, int value) {
     // Combine them into 2d intervals and update them
     int x_dim = n_;
     int y_dim = n_;
-    for (int i = x_intervals.size() - 1; i > 0; i--) {  // go over intervals from smallest to largest
+    for (int i = x_intervals.size() - 1; i >= 0; i--) {  // go over intervals from smallest to largest
         bool flag = false;
-        for (int j = y_intervals.size() - 1; j > 0; j--) {
+        for (int j = y_intervals.size() - 1; j >= 0; j--) {
             if (x_intervals[i].second - x_intervals[i].first + 1 > x_dim && y_intervals[j].second - y_intervals[j].first + 1 > y_dim) {
                 continue;
             }
@@ -774,8 +782,12 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
             
             int x_cell = di.x1/(di.x2-di.x1+1);
             int y_cell = di.y1/(di.y2-di.y1+1);
+
+        
             // Check if the actual sketch is initialized, if it isn't then the value is simply zero
             if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
+                std::cout << "Now querying grid with key: " << key << " that has dims: " << KeyToDimString(key) << 
+                    " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
                 if (sketch_name_ == "CM" || sketch_name_ == "CML2") {
                     if (nr_hashes_ > 0) {
                         query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->QueryItem(item, hashes_));

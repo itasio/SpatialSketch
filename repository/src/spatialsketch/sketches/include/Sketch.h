@@ -36,7 +36,19 @@ class Sketch {
         virtual void PrecomputeInsert(long point, dyadic_cm_precompute *precompute) = 0;
 
         bool NewInsert() { return new_insert_; };
-    
+
+/*
+        //info for SDE
+        std::string datasetKey;
+        std::string streamID;
+        std::string params;
+        int uID;
+        int synopsisID;
+        int numOfParall;
+*/
+
+        
+
         int repetitions_ = 0;
         int** hashab_ = nullptr;
         std::vector<std::vector<bool> > r_bitmap;
