@@ -5,3 +5,7 @@ build/*
 repository/src/CMakeFiles
 *.txt
 *.a
+/repository/src/example
+repository/src/experiments
+repository/src/Makefile
+repository/src/cmake_install.cmake

@@ -803,6 +803,7 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
                         query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->QueryItem(item, timestamp));
                     }
                 }
+                std::cout << "Query result so far: " << query_sum << std::endl;
             } 
             return true;  // Grid exists, thus query was success
         }
