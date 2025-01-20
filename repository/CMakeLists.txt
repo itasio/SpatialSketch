@@ -50,6 +50,10 @@ include_directories(${RDKAFKA_INCLUDE_DIRS})
 link_directories(${RDKAFKA_LIBRARY_DIRS})
 add_definitions(${RDKAFKA_CFLAGS_OTHER})
 
+#find and include json library
+find_package(nlohmann_json REQUIRED)
+
+
 # MARQ
 include_directories(src/MARQ/include)
 #add_library(MARQ         src/MARQ/marq.cpp
@@ -65,6 +69,7 @@ target_link_libraries(experiments spatialsketch) # MARQ
 
 # Example
 add_executable(example src/main/example.cpp)
-target_link_libraries(example spatialsketch
-                                ${RDKAFKA_LIBRARIES})
+target_link_libraries(example   spatialsketch
+                                ${RDKAFKA_LIBRARIES}
+                                nlohmann_json::nlohmann_json)
 

@@ -1,33 +1,82 @@
 #include "Messenger.h"
 
 #include <iostream>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+
+Messenger::Messenger(std::string &brokers){
+    this->brokers = brokers;
+}
+
+// Define how to convert MyCustomData to JSON
+void to_json(json& j, const request& rq) {
+    j = json{
+            {"key", rq.DataSetkey},
+            {"noOfP", rq.NoOfP},
+            {"streamID", rq.StreamID},
+            {"param", rq.Param},
+            {"dataSetkey", rq.DataSetkey},
+            {"requestID", rq.RequestID},
+            {"synopsisID", rq.SynopsisID},
+            {"uid", rq.UID}
+            };
+}
+
+void to_json(json& j, const Data& d) {
+    json dataSent;
+    dataSent[d.keyFieldName] = d.keyToSend;
+    dataSent[d.valueFieldName] = d.valueToSend;
+
+    j = json{
+        {"dataSetkey", d.DataSetkey},
+        {"streamID", d.StreamID},
+        {"values", dataSent}
+    };
+}
+
+void Messenger::sendData(Data d)
+{
+    std::string topic_name = "data_topic";
+    json j = d;
+    std::string msg = j.dump(4);    // serialization with pretty printing
+    this->sendKafkaMsg(brokers, topic_name, msg);
+}
+
+void Messenger::sendRequest(request rq){
+    std::string topic_name = "request_topic";
+
+    json j = rq;
+
+    std::string msg = j.dump(4);    // serialization with pretty printing
+
+    this->sendKafkaMsg(brokers, topic_name, msg);
 
 
-
-void Messenger::sendData(){
-    std::cout << "Hello world " <<std::endl;
 }
 
 void Messenger::dr_cb(RdKafka::Message &message) {
     if (message.err()) {
-        std::cerr << "Message couldn't be delivered: " << message.errstr() << std::endl;
+        std::cout << "Message couldn't be delivered: " << message.errstr() << std::endl;
     } 
-    /*else {
+    else {
         std::cout << "Message delivered to topic " << message.topic_name()
                   << " [" << message.partition() << "] at offset "
                   << message.offset() << std::endl;
-    }*/
+    }
 }
 
 void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message){
     std::string errstr;
 
     RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    
     if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
         std::cerr << "Failed to set brokers: " << errstr << std::endl;
         return;
     }
 
+    conf->set("dr_cb", this, errstr);
     RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
     if (!producer) {
         std::cerr << "Failed to create producer: " << errstr << std::endl;

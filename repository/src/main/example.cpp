@@ -54,7 +54,29 @@ int main() {
 
     std::cout << "\nQuery answer to range " << r.x1 << ", " << r.y1 << ", " << r.x2 << ", " << r.y2 << " is " << query_answer << std::endl;
 
-    Messenger m = Messenger();
-    m.sendData();
+
+    std::string brokers = "192.168.43.155:9092";
+    Messenger m = Messenger(brokers);
+    request rq;
+    rq.DataSetkey = "Poly_Data";
+
+    rq.RequestID = 3;
+    rq.SynopsisID = 1;
+    rq.UID = 45;
+    rq.StreamID = "Poly_Data";
+    // rq.Param = {"Poly_Data","label","Queryable","0.0002", "0.99", "4"};
+    rq.Param = {"4"};
+    rq.NoOfP = 3;
+    // m.sendRequest(rq);
+
+    Data d;
+    d.DataSetkey = "Poly_Data";
+    d.StreamID = "Poly_Data";
+    d.keyFieldName = "Poly_Data";
+    d.keyToSend = "5";
+    d.valueFieldName = "label";
+    d.valueToSend = "60";
+    m.sendData(d);
+
     return 0;
 }
