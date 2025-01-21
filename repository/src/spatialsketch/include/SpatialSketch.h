@@ -18,7 +18,7 @@
 #include <vector>
 #include <list>
 #include <unordered_map>
-
+#include <string>
 
 // ElasticSketch parameters
 // Same budget as one CM sketch with epsilon=0.1 and delta=0.05.
@@ -27,6 +27,7 @@
 //#define BUCKET_NUM (1)
 #define TOT_MEM_IN_BYTES (336)
 typedef ElasticSketch<BUCKET_NUM,TOT_MEM_IN_BYTES> Elastic;
+
 
 typedef struct es_grid {
     Elastic*** cells = 0;
@@ -52,7 +53,38 @@ typedef struct es_grid {
     }
 } es_grid;
 
+typedef struct sde_sketch {
+    int  SynopsisID;
+    std::string keyIndex;
+    std::string valueIndex;
+    std::string operationMode;
+} sde_sketch;
 
+
+typedef struct sde_grid {
+    sde_sketch*** cells = 0;
+    int x_dim = 0;
+    int nr_init_sketches = 0;
+
+    sde_grid(int x_dim, int y_dim) : x_dim(x_dim) {
+        cells = new sde_sketch**[x_dim];
+        for (int i = 0; i < x_dim; i++) {
+            cells[i] = new sde_sketch*[y_dim];
+            // Enforce null pointers
+            for (int j = 0; j < y_dim; j++) {
+                cells[i][j] = NULL;
+            }
+        }
+    }
+    
+    ~sde_grid() {
+        for (int i = 0; i < x_dim; i++) {
+            delete[] cells[i];
+        }
+        delete[] cells;
+    }
+
+} sde_grid;
 
 typedef struct grid {
     Sketch*** cells = 0;
@@ -135,7 +167,10 @@ class SpatialSketch {
         // The kafka client to send messages to kafka
         // Messenger mes;
         std::optional<Messenger> mes_;
-        
+        // Hash map that points to the sde grids
+        std::unordered_map<int, sde_grid*> sde_grids_;
+
+
         // Hash map that points to the grids
         std::unordered_map<int, grid*> grids_;
         int n_ = 0; // Current largest resolution n x n grid

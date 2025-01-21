@@ -15,11 +15,11 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
     sketch_name_ = sketch_name;
     domain_size_ = domain_size;
 
-    if(isMessengerUsed){    //handle sketches to SDE
+    if(isMessengerUsed()){    //handle sketches to SDE
         if(sketch_name != "CM" && sketch_name != "BF"){
             throw invalid_argument("Not implemented yet");
         }
-    }else{  //handle sketches locally
+    }else {  //handle sketches locally
         // sketch setup
         if (sketch_name == "CM" || sketch_name == "CML2") { // cm
             sketch_ = new CountMin(epsilon_, delta_);
@@ -60,40 +60,54 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
         }
     }
 
-
-
-    // Create list of #levels_ hash maps, where the end of the list contains the highest resolution and the last element contains the single cell grid
-    if (elastic_sketch_) {
-        es_grids_.reserve(levels_*levels_);
+// Create list of #levels_ hash maps, where the end of the list contains the highest resolution and the last element contains the single cell grid
+    if(isMessengerUsed()){  //handle sketches with the SDE
+        sde_grids_.reserve(levels_*levels_);
         for (int x_pow = 0; x_pow < levels_; x_pow++) {
-            for (int y_pow = 0; y_pow < levels_; y_pow++) {
-                int x_dim = std::pow(2,x_pow);
-                int y_dim = std::pow(2,y_pow);
-                es_grid *g = new es_grid(x_dim, y_dim);
-                es_grids_[DimToKey(x_dim, y_dim)] = g;
+                for (int y_pow = 0; y_pow < levels_; y_pow++) {
+                    int x_dim = std::pow(2,x_pow);
+                    int y_dim = std::pow(2,y_pow);
+                    sde_grid *g = new sde_grid(x_dim, y_dim);
+                    sde_grids_[DimToKey(x_dim, y_dim)] = g;
 
-                // Grid without initialized sketches is 2d array of null pointers
-                current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+                    // Grid without initialized sketches is 2d array of null pointers
+                    current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+                }
             }
-        }
-    } else {
-        grids_.reserve(levels_*levels_);
-// TODO what to do with grids when using SDE ???
-        for (int x_pow = 0; x_pow < levels_; x_pow++) {
-            for (int y_pow = 0; y_pow < levels_; y_pow++) {
-                int x_dim = std::pow(2,x_pow);
-                int y_dim = std::pow(2,y_pow);
-                grid *g = new grid(x_dim, y_dim);
-                grids_[DimToKey(x_dim, y_dim)] = g;
-                
-                std::cout << "Grid created with dims: " << x_dim << "," << y_dim <<std::endl;
+    }else {
+        if (elastic_sketch_) {
+            es_grids_.reserve(levels_*levels_);
+            for (int x_pow = 0; x_pow < levels_; x_pow++) {
+                for (int y_pow = 0; y_pow < levels_; y_pow++) {
+                    int x_dim = std::pow(2,x_pow);
+                    int y_dim = std::pow(2,y_pow);
+                    es_grid *g = new es_grid(x_dim, y_dim);
+                    es_grids_[DimToKey(x_dim, y_dim)] = g;
 
-                // Grid without initialized sketches is 2d array of null pointers
-                current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+                    // Grid without initialized sketches is 2d array of null pointers
+                    current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+                }
             }
+        } else {
+            grids_.reserve(levels_*levels_);
+            for (int x_pow = 0; x_pow < levels_; x_pow++) {
+                for (int y_pow = 0; y_pow < levels_; y_pow++) {
+                    int x_dim = std::pow(2,x_pow);
+                    int y_dim = std::pow(2,y_pow);
+                    grid *g = new grid(x_dim, y_dim);
+                    grids_[DimToKey(x_dim, y_dim)] = g;
+                    
+                    std::cout << "Grid created with dims: " << x_dim << "," << y_dim <<std::endl;
+
+                    // Grid without initialized sketches is 2d array of null pointers
+                    current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+                }
+            }
+            std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
         }
-        std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
     }
+    
+
 
     //SetupTopLevelIntervals(n_);
     top_level_intervals_ = {dyadic1D(1, n_)};  // simply replace for SetupTopLevelIntervals() when using grids fo powers of 2
@@ -102,15 +116,22 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
     }
 
     // Rehash for efficiency and add hash map size
-    if (elastic_sketch_) {
-        es_grids_.rehash(es_grids_.size());
-        current_memory_ += es_grids_.size() * (sizeof(void*)) + // data list
-                                es_grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;        
-    } else {
-        grids_.rehash(grids_.size());
-        current_memory_ += grids_.size() * (sizeof(void*)) + // data list
-                                grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
+    if(isMessengerUsed()){
+        sde_grids_.rehash(sde_grids_.size());
+        current_memory_ += sde_grids_.size() * (sizeof(void*)) + // data list
+                                sde_grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
+    }else {
+        if (elastic_sketch_) {
+            es_grids_.rehash(es_grids_.size());
+            current_memory_ += es_grids_.size() * (sizeof(void*)) + // data list
+                                    es_grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;        
+        } else {
+            grids_.rehash(grids_.size());
+            current_memory_ += grids_.size() * (sizeof(void*)) + // data list
+                                    grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
+        }
     }
+    
 }
 
 // SpatialSketch::SpatialSketch(Messenger mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
