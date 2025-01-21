@@ -26,6 +26,7 @@ typedef struct Data {
 
 class Messenger : public RdKafka::DeliveryReportCb {
     public:
+        Messenger();
         Messenger(std::string &brokers);
         void sendData(Data d);
         void sendRequest(request rq);

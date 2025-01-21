@@ -9,7 +9,7 @@ Messenger::Messenger(std::string &brokers){
     this->brokers = brokers;
 }
 
-// Define how to convert MyCustomData to JSON
+// Define how to convert request  to JSON
 void to_json(json& j, const request& rq) {
     j = json{
             {"key", rq.DataSetkey},
@@ -23,6 +23,7 @@ void to_json(json& j, const request& rq) {
             };
 }
 
+// Define how to convert data to JSON
 void to_json(json& j, const Data& d) {
     json dataSent;
     dataSent[d.keyFieldName] = d.keyToSend;

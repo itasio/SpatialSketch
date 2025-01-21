@@ -5,6 +5,8 @@
 #include "Statistics.h"
 #include "DyadicRanges.h"
 
+
+#include "Messenger.h"
 #include "Sketch.h"
 #include "CountMin.h"
 #include "DyadCountMin.h"
@@ -90,6 +92,16 @@ class SpatialSketch {
         */
         SpatialSketch(std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
 
+
+        /**
+        * @brief initialize spatialsketch to be used with SDE
+        * @param n highest resolution is grid of n x n
+        * @param memory_lim available memory, should not be exceeded and high resolution layers will be thrown away for this
+        *                   default is -1 which implies there is no limit
+        * @note Exception handling for very small memory limits is not implemented
+        */
+        //SpatialSketch(Messenger mes, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
+
         // Cleanup
         ~SpatialSketch();
 
@@ -119,6 +131,11 @@ class SpatialSketch {
         void PrintCoverage();
 
     private:
+
+        // The kafka client to send messages to kafka
+        // Messenger mes;
+        std::optional<Messenger> mes_;
+        
         // Hash map that points to the grids
         std::unordered_map<int, grid*> grids_;
         int n_ = 0; // Current largest resolution n x n grid
@@ -147,6 +164,14 @@ class SpatialSketch {
         dyadic_cm_precompute* precompute_;
         bool new_insert_ = true;
 
+
+        inline bool isMessengerUsed() {
+            return mes_.has_value();
+        }
+
+        void setMessenger(Messenger m){
+            mes_ = m;
+        }
         // Grid / layer dropping variables
         int diag_exponent_ = 1;  // The combined exponent of the diagonal layer resolution to be dropped, first grids to drop are g(2^1, 2^0) and g(2^0, 2^1), where exponent sum is odd
         int dropping_phase_ = 1; // 1: dropping grids of diagonal layers sequentially, 2: dropping lowest resolution grids

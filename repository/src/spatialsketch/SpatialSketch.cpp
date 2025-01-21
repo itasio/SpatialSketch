@@ -15,44 +15,52 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
     sketch_name_ = sketch_name;
     domain_size_ = domain_size;
 
-    // sketch setup
-    if (sketch_name == "CM" || sketch_name == "CML2") { // cm
-        sketch_ = new CountMin(epsilon_, delta_);
-        hash_coeffs_ = sketch_->GetHashesCoeff();
-        hashes_ = new uint[sketch_->repetitions_];
-    } else if (sketch_name_ == "dyadicCM") { // dyadic cm 
-        sketch_ = new DyadCountMin(epsilon_, delta_);
-        precompute_ = new dyadic_cm_precompute();
-    } else if (sketch_name_ == "FM") {
-        sketch_ = new FM(epsilon_, delta_);
-        hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
-        hashes_long_ = new long[sketch_->repetitions_];
-        //precompute_ = new fm_precompute();
-    } else if (sketch_name_ == "BF") {
-        sketch_ = new BloomFilter(delta_, domain_size);
-        hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
-        hashes_ = new uint[sketch_->repetitions_];
-        //precompute_ = new bloom_precompute();
-    } else if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
-        sketch_ = new ECM(epsilon_, delta_);
-        hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
-        hashes_long_ = new long[sketch_->repetitions_];
-    } else if (sketch_name_ == "ElasticSketch") {
-        elastic_sketch_ = true; // indication wether to use elastic sketch in grid implementation
-        hashes_32_ = new uint32_t[2];
-        es_sketch_ = new Elastic();
-    } else {
-        throw "SpatialSketch::SpatialSketch: sketch name not recognized";
+    if(isMessengerUsed){    //handle sketches to SDE
+        if(sketch_name != "CM" && sketch_name != "BF"){
+            throw invalid_argument("Not implemented yet");
+        }
+    }else{  //handle sketches locally
+        // sketch setup
+        if (sketch_name == "CM" || sketch_name == "CML2") { // cm
+            sketch_ = new CountMin(epsilon_, delta_);
+            hash_coeffs_ = sketch_->GetHashesCoeff();
+            hashes_ = new uint[sketch_->repetitions_];
+        } else if (sketch_name_ == "dyadicCM") { // dyadic cm 
+            sketch_ = new DyadCountMin(epsilon_, delta_);
+            precompute_ = new dyadic_cm_precompute();
+        } else if (sketch_name_ == "FM") {
+            sketch_ = new FM(epsilon_, delta_);
+            hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
+            hashes_long_ = new long[sketch_->repetitions_];
+            //precompute_ = new fm_precompute();
+        } else if (sketch_name_ == "BF") {
+            sketch_ = new BloomFilter(delta_, domain_size);
+            hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
+            hashes_ = new uint[sketch_->repetitions_];
+            //precompute_ = new bloom_precompute();
+        } else if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
+            sketch_ = new ECM(epsilon_, delta_);
+            hash_coeffs_long_ = sketch_->GetHashesCoeffLong();
+            hashes_long_ = new long[sketch_->repetitions_];
+        } else if (sketch_name_ == "ElasticSketch") {
+            elastic_sketch_ = true; // indication wether to use elastic sketch in grid implementation
+            hashes_32_ = new uint32_t[2];
+            es_sketch_ = new Elastic();
+        } else {
+            throw "SpatialSketch::SpatialSketch: sketch name not recognized";
+        }
+
+        if (elastic_sketch_) {
+            // elastic sketch size does not change <- It can be compressed but not necessary in our experiments.
+            sketch_size_ = TOT_MEM_IN_BYTES;
+        } else {
+            sketch_size_ = sketch_->GetSize();
+            std::cout << "Sketch size " << sketch_size_ / 1024 << "KB" << std::endl;
+            std::cout << "Sketch repetitions " << sketch_->repetitions_ << std::endl;
+        }
     }
 
-    if (elastic_sketch_) {
-        // elastic sketch size does not change <- It can be compressed but not necessary in our experiments.
-         sketch_size_ = TOT_MEM_IN_BYTES;
-    } else {
-        sketch_size_ = sketch_->GetSize();
-        std::cout << "Sketch size " << sketch_size_ / 1024 << "KB" << std::endl;
-        std::cout << "Sketch repetitions " << sketch_->repetitions_ << std::endl;
-    }
+
 
     // Create list of #levels_ hash maps, where the end of the list contains the highest resolution and the last element contains the single cell grid
     if (elastic_sketch_) {
@@ -70,7 +78,7 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
         }
     } else {
         grids_.reserve(levels_*levels_);
-
+// TODO what to do with grids when using SDE ???
         for (int x_pow = 0; x_pow < levels_; x_pow++) {
             for (int y_pow = 0; y_pow < levels_; y_pow++) {
                 int x_dim = std::pow(2,x_pow);
@@ -104,6 +112,41 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
                                 grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
     }
 }
+
+// SpatialSketch::SpatialSketch(Messenger mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
+//     mes = mes;
+//     n_ = n;
+//     memory_limit_ = memory_lim;
+//     epsilon_ = epsilon;
+//     delta_ = delta;
+//     levels_ = std::floor(std::log2(n_)) + 1;
+//     sketch_name_ = sketch_name;
+//     domain_size_ = domain_size;
+
+//     if (sketch_name != "CM" && sketch_name != "BF"){
+//          throw std::invalid_argument("Not implemented yet");
+//     }
+
+//     grids_.reserve(levels_*levels_);
+
+//     for (int x_pow = 0; x_pow < levels_; x_pow++) {
+//         for (int y_pow = 0; y_pow < levels_; y_pow++) {
+//             int x_dim = std::pow(2,x_pow);
+//             int y_dim = std::pow(2,y_pow);
+//             grid *g = new grid(x_dim, y_dim);
+//             grids_[DimToKey(x_dim, y_dim)] = g;
+            
+//             std::cout << "Grid created with dims: " << x_dim << "," << y_dim <<std::endl;
+
+//             // Grid without initialized sketches is 2d array of null pointers
+//             current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
+//         }
+//     }
+//     std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
+//     grids_.rehash(grids_.size());
+//     current_memory_ += grids_.size() * (sizeof(void*)) + // data list
+//                             grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
+// }
 
 SpatialSketch::~SpatialSketch() {
     if (elastic_sketch_) {
