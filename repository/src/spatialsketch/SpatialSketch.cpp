@@ -17,7 +17,7 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
 
     if(isMessengerUsed()){    //handle sketches to SDE
         if(sketch_name != "CM" && sketch_name != "BF"){
-            throw invalid_argument("Not implemented yet");
+            throw "The sketch "+ sketch_name +" is not implemented yet";
         }
     }else {  //handle sketches locally
         // sketch setup
@@ -134,40 +134,6 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
     
 }
 
-// SpatialSketch::SpatialSketch(Messenger mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
-//     mes = mes;
-//     n_ = n;
-//     memory_limit_ = memory_lim;
-//     epsilon_ = epsilon;
-//     delta_ = delta;
-//     levels_ = std::floor(std::log2(n_)) + 1;
-//     sketch_name_ = sketch_name;
-//     domain_size_ = domain_size;
-
-//     if (sketch_name != "CM" && sketch_name != "BF"){
-//          throw std::invalid_argument("Not implemented yet");
-//     }
-
-//     grids_.reserve(levels_*levels_);
-
-//     for (int x_pow = 0; x_pow < levels_; x_pow++) {
-//         for (int y_pow = 0; y_pow < levels_; y_pow++) {
-//             int x_dim = std::pow(2,x_pow);
-//             int y_dim = std::pow(2,y_pow);
-//             grid *g = new grid(x_dim, y_dim);
-//             grids_[DimToKey(x_dim, y_dim)] = g;
-            
-//             std::cout << "Grid created with dims: " << x_dim << "," << y_dim <<std::endl;
-
-//             // Grid without initialized sketches is 2d array of null pointers
-//             current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
-//         }
-//     }
-//     std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
-//     grids_.rehash(grids_.size());
-//     current_memory_ += grids_.size() * (sizeof(void*)) + // data list
-//                             grids_.bucket_count() * (sizeof(void*) + sizeof(size_t)); // bucket index;
-// }
 
 SpatialSketch::~SpatialSketch() {
     if (elastic_sketch_) {
@@ -392,7 +358,36 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
 
     int key = DimToKey(n_ / (x2 - x1 + 1), n_ / (y2 - y1 + 1));
 
-    if (elastic_sketch_) {
+    if (isMessengerUsed()){ //update Sketch in SDE
+        // Check if grid exists, if not, then it has dropped 
+        std::unordered_map<int, sde_grid*>::iterator grid_ptr = sde_grids_.find(key);
+        if (grid_ptr != sde_grids_.end()) { //grid exists
+            int x_cell = x1/(x2-x1+1);
+            int y_cell = y1/(y2-y1+1);
+
+            std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
+             " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
+            if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {  // Sketch in this cell is not initialized
+                grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch;
+                
+                request rq ;
+
+                rq.RequestID = RQ_ID_ADD_SYN;
+                if (sketch_name_ == "CM") {
+                    rq.SynopsisID = CM_ID;
+                }else if (sketch_name_ == "BF") {
+                    rq.SynopsisID = BF_ID;
+                } else {
+                    throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
+                }
+                rq.UID =  key;
+                rq.NoOfP = 3;
+                
+                mes_->sendRequest(rq);
+            }
+             
+        }
+    } else if (elastic_sketch_) {
         std::unordered_map<int, es_grid*>::iterator grid_ptr = es_grids_.find(key);
         if (grid_ptr != es_grids_.end()) {
             int x_cell = x1/(x2-x1+1);
@@ -489,6 +484,13 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
 }
 
 inline void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, int value, dyadic_cm_precompute* precompute) {
+
+    if (isMessengerUsed())
+    {
+        throw "Not implemented yet SDE for dyadicCM";
+    }
+    
+
     // Check if sketch is initialized and do so if not
     if (sketch_name_ != "dyadicCM") {
         throw "SpatialSketch::UpdateInterval: sketch is not dyadicCM";
@@ -605,19 +607,25 @@ std::vector<std::pair<int, int>> SpatialSketch::FindChildInterval(int target, in
 // Update the dyadic intervals that contain the given point with the given value
 // X and y are done seperately and joined at the end
 void SpatialSketch::Update(int x, int y, long item, int value) {
-    if (sketch_name_ == "CM" || sketch_name_ == "CML2") {
-        nr_hashes_ = sketch_->GetItemHashes(item, hashes_);
-    } else if (sketch_name_== "dyadicCM") {
-        sketch_->PrecomputeInsert(item, precompute_);
-    } else if(sketch_name_ == "FM") {
-        nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
-    } else if (sketch_name_ == "BF") {
-        nr_hashes_ = 0; //sketch_->repetitions_;//GetItemHashes(item, hashes_);
-    } else if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
-        nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
-    } else if (sketch_name_ == "ElasticSketch") {
-        nr_hashes_ = es_sketch_->GetItemHashes((uint8_t*) &item, hashes_32_);
+
+    if (!isMessengerUsed())
+    {
+        if (sketch_name_ == "CM" || sketch_name_ == "CML2") {
+            nr_hashes_ = sketch_->GetItemHashes(item, hashes_);
+        } else if (sketch_name_== "dyadicCM") {
+            sketch_->PrecomputeInsert(item, precompute_);
+        } else if(sketch_name_ == "FM") {
+            nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
+        } else if (sketch_name_ == "BF") {
+            nr_hashes_ = 0; //sketch_->repetitions_;//GetItemHashes(item, hashes_);
+        } else if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
+            nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
+        } else if (sketch_name_ == "ElasticSketch") {
+            nr_hashes_ = es_sketch_->GetItemHashes((uint8_t*) &item, hashes_32_);
+        }
     }
+    
+ 
 
     std::vector<std::pair<int, int>> x_intervals, y_intervals;
     // Find the set of dyadic intervals for the given x,y by recursng on their respective top level interval

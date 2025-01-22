@@ -54,7 +54,10 @@ typedef struct es_grid {
 } es_grid;
 
 typedef struct sde_sketch {
-    int  SynopsisID;
+    // represents the type of Synopsis that is used
+    int SynopsisID;
+    // unique for each Synopsis
+    int uID;
     std::string keyIndex;
     std::string valueIndex;
     std::string operationMode;
