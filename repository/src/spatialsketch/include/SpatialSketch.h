@@ -58,9 +58,13 @@ typedef struct sde_sketch {
     int SynopsisID;
     // unique for each Synopsis
     int uID;
-    std::string keyIndex;
-    std::string valueIndex;
-    std::string operationMode;
+    // the parallelism of the sketch
+	int NoOfP;;
+    std::string DataSetkey;
+    std::string StreamID;
+    std::string keyIndex = "key";
+    std::string valueIndex = "value";
+    std::string operationMode = "Queryable";
 } sde_sketch;
 
 
@@ -210,6 +214,9 @@ class SpatialSketch {
         void setMessenger(Messenger m){
             mes_ = m;
         }
+
+        request CreateRequest(int key, int x_cell,int y_cell, int rq_id);
+
         // Grid / layer dropping variables
         int diag_exponent_ = 1;  // The combined exponent of the diagonal layer resolution to be dropped, first grids to drop are g(2^1, 2^0) and g(2^0, 2^1), where exponent sum is odd
         int dropping_phase_ = 1; // 1: dropping grids of diagonal layers sequentially, 2: dropping lowest resolution grids

@@ -349,6 +349,38 @@ void SpatialSketch::MemoryCheck() {
     }
 }
 
+request SpatialSketch::CreateRequest(int key, int x_cell,int y_cell, int rq_id){
+    request rq ;
+    std::string gridKey = to_string(key);
+    std::string xCoord = to_string(x_cell);
+    std::string yCoord = to_string(y_cell);
+    std::string combStr = gridKey + xCoord + yCoord;
+
+    rq.UID =  stoi(combStr);
+    rq.DataSetkey = KeyToDimString(key) + xCoord + yCoord;
+    rq.StreamID = rq.DataSetkey;
+    rq.NoOfP = 3;
+    rq.RequestID = rq_id;   //TODO na allazei analoga me to orisma
+    std::string keyInd;
+    std::string valInd;
+    std::string opMode = "Queryable";
+    if (sketch_name_ == "CM") {
+        keyInd = "CM_key";
+        valInd = "CM_value";
+        rq.SynopsisID = CM_ID;
+        std::string seed = "4";
+
+        rq.Param = {keyInd, valInd, opMode, to_string(epsilon_), to_string(1-delta_), seed};
+    }else if (sketch_name_ == "BF") {
+        keyInd = "BF_key";
+        valInd = "BF_value";
+        rq.SynopsisID = BF_ID;
+        rq.Param = {keyInd, valInd, opMode, to_string(domain_size_), to_string(delta_)};
+    } else {
+        throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
+    }
+    return rq;
+}
 
 // --------------- Update functionalities ---------------
 
@@ -356,6 +388,7 @@ void SpatialSketch::MemoryCheck() {
 void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, int value, uint* hashes, long* hashes_long, uint32_t* hashes_32) {
     // Check if sketch is initialized and do so if not
 
+    // The key of the grid
     int key = DimToKey(n_ / (x2 - x1 + 1), n_ / (y2 - y1 + 1));
 
     if (isMessengerUsed()){ //update Sketch in SDE
@@ -368,23 +401,33 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
              " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {  // Sketch in this cell is not initialized
-                grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch;
                 
-                request rq ;
+                request rq = CreateRequest(key, x_cell, y_cell, RQ_ID_ADD_SYN); //create an add synopsis request for SDE
+                mes_->sendRequest(rq);  //send request message to SDE
 
-                rq.RequestID = RQ_ID_ADD_SYN;
-                if (sketch_name_ == "CM") {
-                    rq.SynopsisID = CM_ID;
-                }else if (sketch_name_ == "BF") {
-                    rq.SynopsisID = BF_ID;
-                } else {
-                    throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
+                // TODO na ginetai arxikopoihsh mono an to sendRequest htan epityxhmeno
+                grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch{rq.SynopsisID, rq.UID, rq.NoOfP, rq.DataSetkey, rq.StreamID, rq.Param[0], rq.Param[1], rq.Param[2]};
+                // TODO TODO TODO TODO 111 na ftiaxnw local sk, meta na ftiaxnw rq apo ayto, meta na stelnei to rq, an success 
+                //arikopoiw to grid me to sk
+                // Increment counters
+                grid_ptr->second->nr_init_sketches += 1;
+                current_memory_ += sketch_size_;
+
+                // Initializing of new sketch implies an increase in memory usage
+                if (memory_limit_ > 0) {
+                    MemoryCheck();
                 }
-                rq.UID =  key;
-                rq.NoOfP = 3;
-                
-                mes_->sendRequest(rq);
             }
+            // update an initialized sketch with new data
+            Data d;
+            sde_sketch* local_sk = grid_ptr->second->cells[x_cell][y_cell];
+            d.DataSetkey = local_sk->DataSetkey;
+            d.StreamID = local_sk->StreamID;
+            d.keyFieldName = local_sk->keyIndex;
+            d.keyToSend = item;
+            d.valueFieldName = local_sk->valueIndex;
+            d.valueToSend = value;
+            mes_->sendData(d);
              
         }
     } else if (elastic_sketch_) {

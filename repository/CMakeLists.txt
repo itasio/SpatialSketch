@@ -65,7 +65,9 @@ include_directories(src/MARQ/include)
 # Experiments
 include_directories(src/other/include) # required for reservoir sampling and multidim cm
 add_executable(experiments src/main/experiments.cpp src/other/ReservoirSampling.cpp src/other/MultiDimCM.cpp)
-target_link_libraries(experiments spatialsketch) # MARQ
+target_link_libraries(experiments spatialsketch
+                                    ${RDKAFKA_LIBRARIES}
+                                    nlohmann_json::nlohmann_json) # MARQ
 
 # Example
 add_executable(example src/main/example.cpp)
