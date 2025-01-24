@@ -131,15 +131,14 @@ class SpatialSketch {
         */
         SpatialSketch(std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
 
-
         /**
-        * @brief initialize spatialsketch to be used with SDE
-        * @param n highest resolution is grid of n x n
-        * @param memory_lim available memory, should not be exceeded and high resolution layers will be thrown away for this
-        *                   default is -1 which implies there is no limit
-        * @note Exception handling for very small memory limits is not implemented
+         * @brief initialize spatialsketch with Messenger included to be used for handling sketches in SDE
+         * @param n highest resolution is grid of n x n
+         * @param memory_lim available memory, should not be exceeded and high resolution layers will be thrown away for this
+         *                   default is -1 which implies there is no limit
+         * @note Exception handling for very small memory limits is not implemented
         */
-        //SpatialSketch(Messenger mes, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
+        SpatialSketch(std::optional<Messenger> mes, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
 
         // Cleanup
         ~SpatialSketch();

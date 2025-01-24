@@ -2,10 +2,14 @@ build/*
 .vscode
 .idea
 /repository/datasets
-repository/src/CMakeFiles
+repository/CMakeFiles
 *.txt
 *.a
 /repository/src/example
 repository/src/experiments
-repository/src/Makefile
+repository/Makefile
+repository/cmake_install.cmake
+
 repository/src/cmake_install.cmake
+repository/src/Makefile
+repository/src/CMakeFiles
