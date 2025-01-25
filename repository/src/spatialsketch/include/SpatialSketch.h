@@ -60,11 +60,16 @@ typedef struct sde_sketch {
     int uID;
     // the parallelism of the sketch
 	int NoOfP;;
+    std::vector<std::string> Param;
     std::string DataSetkey;
     std::string StreamID;
     std::string keyIndex = "key";
     std::string valueIndex = "value";
     std::string operationMode = "Queryable";
+
+    size_t hashCode() const {
+        return std::hash<const void*>()(this); // Hash only the memory address
+    }
 } sde_sketch;
 
 
@@ -214,7 +219,9 @@ class SpatialSketch {
             mes_ = m;
         }
 
+        sde_sketch* InitSdeSketch(int key, int x_cell, int y_cell);
         request CreateRequest(int key, int x_cell,int y_cell, int rq_id);
+        request CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq);
 
         // Grid / layer dropping variables
         int diag_exponent_ = 1;  // The combined exponent of the diagonal layer resolution to be dropped, first grids to drop are g(2^1, 2^0) and g(2^0, 2^1), where exponent sum is odd

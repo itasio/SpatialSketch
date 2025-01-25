@@ -362,7 +362,76 @@ void SpatialSketch::MemoryCheck() {
     }
 }
 
-request SpatialSketch::CreateRequest(int key, int x_cell,int y_cell, int rq_id){
+request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq){
+    request rq ;
+    if (sketches.size() > 1 && type_of_rq != RQ_ID_EST_MANY_SYN)
+    {
+        throw "Operation not supported. Only query multiple synopses is allowed.";
+    }
+    //todo check all conditions are met
+    if (type_of_rq == RQ_ID_ADD_SYN) {   // create an add synopsis request
+        sde_sketch sk = sketches[0];
+        rq.DataSetkey = sk.DataSetkey;
+        rq.NoOfP = sk.NoOfP;
+        rq.Param = sk.Param;
+        rq.RequestID = type_of_rq;
+        rq.StreamID = sk.StreamID;
+        rq.SynopsisID = sk.SynopsisID;
+        rq.UID = sk.uID;
+        return rq;
+    } else if (type_of_rq == RQ_ID_EST_ONE_SYN) {
+
+        return rq;
+
+    }else if (type_of_rq == RQ_ID_EST_MANY_SYN) {
+
+        return rq;
+    } else if (type_of_rq == RQ_ID_DEL_SYN) {
+        return rq;
+    }else {
+        throw "Not implemented this operation yet.";
+    }
+}
+
+sde_sketch *SpatialSketch::InitSdeSketch(int key, int x_cell, int y_cell){
+    sde_sketch * sk = new sde_sketch;
+    std::string gridKey = to_string(key);
+    std::string xCoord = to_string(x_cell);
+    std::string yCoord = to_string(y_cell);
+    std::string combStr = gridKey + xCoord + yCoord;
+
+    /*use also struct's hashcode in order to differentiate two sketches that 
+    belong in a grid with identical dimensions, are positioned in identical grid coordinates,
+    but belong in two different instances of Spatialsketch e.g spatialsketch that uses CM sketches and another that uses BloomFilter */
+
+    // e.g. 2,2_[0,0]_12345 grid has 2x2 dims, sketch is in [0,0] coordinates of grid, hash code of sketch is ...
+    sk->DataSetkey =  KeyToDimString(key) +"_[" +xCoord +","+ yCoord+"]_" + to_string(sk->hashCode());  
+    sk->uID = stoi(combStr);
+    sk->StreamID = sk->DataSetkey;
+    sk->NoOfP = 3;
+    std::string keyInd;
+    std::string valInd;
+    std::string opMode = "Queryable";
+    if (sketch_name_ == "CM"){
+        keyInd = "CM_key";
+        valInd = "CM_value";
+        sk->SynopsisID = CM_ID;
+        std::string seed = "4";
+
+        sk->Param = {keyInd, valInd, opMode, to_string(epsilon_), to_string(1-delta_), seed};
+    }else if (sketch_name_ == "BF") {
+        keyInd = "BF_key";
+        valInd = "BF_value";
+        sk->SynopsisID = BF_ID;
+        sk->Param = {keyInd, valInd, opMode, to_string(domain_size_), to_string(delta_)};
+    } else {
+        throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
+    }
+    
+    return sk;
+}
+
+request SpatialSketch::CreateRequest(int key, int x_cell, int y_cell, int rq_id){
     request rq ;
     std::string gridKey = to_string(key);
     std::string xCoord = to_string(x_cell);
@@ -415,13 +484,16 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
              " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {  // Sketch in this cell is not initialized
                 
-                request rq = CreateRequest(key, x_cell, y_cell, RQ_ID_ADD_SYN); //create an add synopsis request for SDE
-                mes_->sendRequest(rq);  //send request message to SDE
+                // request rq = CreateRequest(key, x_cell, y_cell, RQ_ID_ADD_SYN); //create an add synopsis request for SDE
+                // mes_->sendRequest(rq);  //send request message to SDE
+                // grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch{rq.SynopsisID, rq.UID, rq.NoOfP, rq.Param, rq.DataSetkey, rq.StreamID, rq.Param[0], rq.Param[1], rq.Param[2]};
 
-                // TODO na ginetai arxikopoihsh mono an to sendRequest htan epityxhmeno
-                grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch{rq.SynopsisID, rq.UID, rq.NoOfP, rq.DataSetkey, rq.StreamID, rq.Param[0], rq.Param[1], rq.Param[2]};
-                // TODO TODO TODO TODO 111 na ftiaxnw local sk, meta na ftiaxnw rq apo ayto, meta na stelnei to rq, an success 
-                //arikopoiw to grid me to sk
+                sde_sketch* sk = InitSdeSketch(key, x_cell, y_cell);
+                request rq = CreateRequest({*sk}, RQ_ID_ADD_SYN);    //create add synopsis request for this sketch
+                mes_->sendRequest(rq);  //send request message to SDE
+                //TODO an success tote orise to grid me to sk alliws delete sk; // Deallocate the memory sk = nullptr; //ensures it doesn’t point to invalid memory.
+                grid_ptr->second->cells[x_cell][y_cell] = sk;
+
                 // Increment counters
                 grid_ptr->second->nr_init_sketches += 1;
                 current_memory_ += sketch_size_;
