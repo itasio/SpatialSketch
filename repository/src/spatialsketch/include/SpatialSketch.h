@@ -56,7 +56,7 @@ typedef struct es_grid {
 typedef struct sde_sketch {
     // represents the type of Synopsis that is used
     int SynopsisID;
-    // unique for each Synopsis
+    // unique for each Synopsis. Will be the concatenated digits of grid's key, x coordinate, y coordinate
     int uID;
     // the parallelism of the sketch
 	int NoOfP;;
@@ -176,7 +176,6 @@ class SpatialSketch {
     private:
 
         // The kafka client to send messages to kafka
-        // Messenger mes;
         std::optional<Messenger> mes_;
         // Hash map that points to the sde grids
         std::unordered_map<int, sde_grid*> sde_grids_;

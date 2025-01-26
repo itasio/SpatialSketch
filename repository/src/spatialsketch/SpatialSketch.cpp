@@ -106,7 +106,8 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
 
 SpatialSketch::SpatialSketch(std::optional<Messenger> mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
     if(sketch_name != "CM" && sketch_name != "BF"){
-            throw "The sketch "+ sketch_name +" is not implemented yet";
+            // throw "The sketch "+ sketch_name +" is not implemented yet";
+            throw std::invalid_argument("The sketch "+ sketch_name +" is not implemented yet");
     }
     n_ = n;
     memory_limit_ = memory_lim;
@@ -130,6 +131,8 @@ SpatialSketch::SpatialSketch(std::optional<Messenger> mes, std::string sketch_na
             current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
         }
     }
+
+    std::cout << sde_grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
 
     //SetupTopLevelIntervals(n_);
     top_level_intervals_ = {dyadic1D(1, n_)};  // simply replace for SetupTopLevelIntervals() when using grids fo powers of 2
@@ -172,7 +175,13 @@ SpatialSketch::~SpatialSketch()
 
 void SpatialSketch::PrintCoverage() {
     if (resolution_ == 1) {
-        std::cout << "Spatialsketch nr of initialized sketches " << grids_[DimToKey(n_,n_)]->nr_init_sketches << std::endl;
+        int num;
+        if (isMessengerUsed())
+            num = sde_grids_[DimToKey(n_,n_)]->nr_init_sketches;
+        else
+            num = grids_[DimToKey(n_,n_)]->nr_init_sketches;
+
+        std::cout << "Spatialsketch nr of initialized sketches " << num  << std::endl;
     }
 }
 
@@ -409,21 +418,13 @@ sde_sketch *SpatialSketch::InitSdeSketch(int key, int x_cell, int y_cell){
     sk->uID = stoi(combStr);
     sk->StreamID = sk->DataSetkey;
     sk->NoOfP = 3;
-    std::string keyInd;
-    std::string valInd;
-    std::string opMode = "Queryable";
     if (sketch_name_ == "CM"){
-        keyInd = "CM_key";
-        valInd = "CM_value";
         sk->SynopsisID = CM_ID;
         std::string seed = "4";
-
-        sk->Param = {keyInd, valInd, opMode, to_string(epsilon_), to_string(1-delta_), seed};
+        sk->Param = {sk->keyIndex, sk->valueIndex, sk->operationMode, to_string(epsilon_), to_string(1-delta_), seed};
     }else if (sketch_name_ == "BF") {
-        keyInd = "BF_key";
-        valInd = "BF_value";
         sk->SynopsisID = BF_ID;
-        sk->Param = {keyInd, valInd, opMode, to_string(domain_size_), to_string(delta_)};
+        sk->Param = {sk->keyIndex, sk->valueIndex, sk->operationMode, to_string(domain_size_), to_string(delta_)};
     } else {
         throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
     }
@@ -509,9 +510,9 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             d.DataSetkey = local_sk->DataSetkey;
             d.StreamID = local_sk->StreamID;
             d.keyFieldName = local_sk->keyIndex;
-            d.keyToSend = item;
+            d.keyToSend = to_string(item);
             d.valueFieldName = local_sk->valueIndex;
-            d.valueToSend = value;
+            d.valueToSend = to_string(value);
             mes_->sendData(d);
              
         }
