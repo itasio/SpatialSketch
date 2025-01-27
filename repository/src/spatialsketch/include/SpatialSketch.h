@@ -179,6 +179,8 @@ class SpatialSketch {
         std::optional<Messenger> mes_;
         // Hash map that points to the sde grids
         std::unordered_map<int, sde_grid*> sde_grids_;
+        // The number of requests sent to SDE for estimating multiple synopses. Must be different for every request.
+        int num_of_req_send = 0;    
 
 
         // Hash map that points to the grids
@@ -219,8 +221,7 @@ class SpatialSketch {
         }
 
         sde_sketch* InitSdeSketch(int key, int x_cell, int y_cell);
-        request CreateRequest(int key, int x_cell,int y_cell, int rq_id);
-        request CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq);
+        request CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq, std::string key_to_query = "");
 
         // Grid / layer dropping variables
         int diag_exponent_ = 1;  // The combined exponent of the diagonal layer resolution to be dropped, first grids to drop are g(2^1, 2^0) and g(2^0, 2^1), where exponent sum is odd

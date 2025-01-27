@@ -371,14 +371,15 @@ void SpatialSketch::MemoryCheck() {
     }
 }
 
-request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq){
+request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq, std::string key_to_query){
     request rq ;
     if (sketches.size() > 1 && type_of_rq != RQ_ID_EST_MANY_SYN)
     {
-        throw "Operation not supported. Only query multiple synopses is allowed.";
+
+        throw std::invalid_argument("Operation not supported. Only query multiple synopses is allowed.");
     }
     //todo check all conditions are met
-    if (type_of_rq == RQ_ID_ADD_SYN) {   // create an add synopsis request
+    if (type_of_rq == RQ_ID_ADD_SYN || type_of_rq == RQ_ID_DEL_SYN) {   // create an add or delete synopsis request
         sde_sketch sk = sketches[0];
         rq.DataSetkey = sk.DataSetkey;
         rq.NoOfP = sk.NoOfP;
@@ -389,16 +390,41 @@ request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_
         rq.UID = sk.uID;
         return rq;
     } else if (type_of_rq == RQ_ID_EST_ONE_SYN) {
-
+        sde_sketch sk = sketches[0];
+        rq.DataSetkey = sk.DataSetkey;
+        rq.NoOfP = sk.NoOfP;
+        rq.Param = {key_to_query};
+        rq.RequestID = type_of_rq;
+        rq.StreamID = sk.StreamID;
+        rq.SynopsisID = sk.SynopsisID;
+        rq.UID = sk.uID;
         return rq;
 
     }else if (type_of_rq == RQ_ID_EST_MANY_SYN) {
+        rq.DataSetkey = "";
+        std::string str = "";   //  "{\"1110\":3,\"2500\":3}" 
+        for (size_t i = 0; i < sketches.size(); i++) {
+            std::string uid = to_string(sketches[i].uID);
+            std::string paral = to_string(sketches[i].NoOfP);
+            str = str + uid +":" + paral + ",";
+            rq.DataSetkey = rq.DataSetkey + sketches[i].DataSetkey + ",";
+        }
+        str.pop_back();                         //remove the last comma
+        rq.DataSetkey.pop_back();               //remove the last comma
+        rq.NoOfP = sketches[0].NoOfP;
+        std::string lBr = "{";
+        std::string rBr = "}";
+        str = lBr + str + rBr;
+        rq.Param = {key_to_query, str};
+        rq.RequestID = type_of_rq;
+        rq.StreamID = sketches[0].StreamID;     //SDE finds the estimate even for irrelevant streamID
+        rq.SynopsisID = sketches[0].SynopsisID; // all synopses have are the same kind
+        rq.UID = num_of_req_send;
+        num_of_req_send ++;
 
         return rq;
-    } else if (type_of_rq == RQ_ID_DEL_SYN) {
-        return rq;
     }else {
-        throw "Not implemented this operation yet.";
+        throw std::invalid_argument("Not implemented this operation yet.");
     }
 }
 
@@ -426,44 +452,13 @@ sde_sketch *SpatialSketch::InitSdeSketch(int key, int x_cell, int y_cell){
         sk->SynopsisID = BF_ID;
         sk->Param = {sk->keyIndex, sk->valueIndex, sk->operationMode, to_string(domain_size_), to_string(delta_)};
     } else {
-        throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
+        throw std::invalid_argument("Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.");
+        
     }
     
     return sk;
 }
 
-request SpatialSketch::CreateRequest(int key, int x_cell, int y_cell, int rq_id){
-    request rq ;
-    std::string gridKey = to_string(key);
-    std::string xCoord = to_string(x_cell);
-    std::string yCoord = to_string(y_cell);
-    std::string combStr = gridKey + xCoord + yCoord;
-
-    rq.UID =  stoi(combStr);
-    rq.DataSetkey = KeyToDimString(key) + xCoord + yCoord;
-    rq.StreamID = rq.DataSetkey;
-    rq.NoOfP = 3;
-    rq.RequestID = rq_id;   //TODO na allazei analoga me to orisma
-    std::string keyInd;
-    std::string valInd;
-    std::string opMode = "Queryable";
-    if (sketch_name_ == "CM") {
-        keyInd = "CM_key";
-        valInd = "CM_value";
-        rq.SynopsisID = CM_ID;
-        std::string seed = "4";
-
-        rq.Param = {keyInd, valInd, opMode, to_string(epsilon_), to_string(1-delta_), seed};
-    }else if (sketch_name_ == "BF") {
-        keyInd = "BF_key";
-        valInd = "BF_value";
-        rq.SynopsisID = BF_ID;
-        rq.Param = {keyInd, valInd, opMode, to_string(domain_size_), to_string(delta_)};
-    } else {
-        throw "Sketch " +sketch_name_ + " is not supported yet. No updates can happen there.";
-    }
-    return rq;
-}
 
 // --------------- Update functionalities ---------------
 
@@ -484,11 +479,6 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
              " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {  // Sketch in this cell is not initialized
-                
-                // request rq = CreateRequest(key, x_cell, y_cell, RQ_ID_ADD_SYN); //create an add synopsis request for SDE
-                // mes_->sendRequest(rq);  //send request message to SDE
-                // grid_ptr->second->cells[x_cell][y_cell] = new sde_sketch{rq.SynopsisID, rq.UID, rq.NoOfP, rq.Param, rq.DataSetkey, rq.StreamID, rq.Param[0], rq.Param[1], rq.Param[2]};
-
                 sde_sketch* sk = InitSdeSketch(key, x_cell, y_cell);
                 request rq = CreateRequest({*sk}, RQ_ID_ADD_SYN);    //create add synopsis request for this sketch
                 mes_->sendRequest(rq);  //send request message to SDE
@@ -616,7 +606,7 @@ inline void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long i
 
     if (isMessengerUsed())
     {
-        throw "Not implemented yet SDE for dyadicCM";
+        throw std::invalid_argument("Not implemented yet SDE for dyadicCM");
     }
     
 
@@ -1159,6 +1149,9 @@ int SpatialSketch::RecurseQueryDyadicIntervalCountDistinct(dyadic2D d_interval, 
 }
 
 int SpatialSketch::QueryCountDistinct(std::vector<range> ranges) {
+    if (isMessengerUsed()) {
+        throw std::invalid_argument("Not implemented yet SDE for dyadicCM");
+    }
     FM merged_fm = FM(epsilon_, delta_, hash_coeffs_long_);
     nr_hashes_ = 0; //merged_fm->GetItemHashes(item, hashes_long_);
 
@@ -1387,6 +1380,9 @@ long SpatialSketch::QueryRangesL2(std::vector<range> ranges) {
 }
 
  int SpatialSketch::QueryECMMerge(std::vector<range> ranges, long item, long item_end, int timestamp) {
+    if (isMessengerUsed()) {
+        throw std::invalid_argument("Not implemented yet SDE for dyadicCM");
+    }
     std::pair<int, int> index;
     std::vector<dyadic2D> dyadic_intervals;
     dyadic_intervals.reserve(levels_*levels_);
