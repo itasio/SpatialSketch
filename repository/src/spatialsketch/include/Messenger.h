@@ -49,16 +49,17 @@ typedef struct Data {
 
 class Messenger : public RdKafka::DeliveryReportCb {
     public:
-        Messenger();
         Messenger(std::string &brokers);
         void sendData(Data d);
         void sendRequest(request rq);
+        void receiveEstimation();
         void dr_cb(RdKafka::Message &message) override;
         
         std::string brokers; //kafka listener
 
     private:
         void sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message);
+        void consumeKafkaMsg(const std::string &brokers, const std::string &topic_name);
 };
 
 #endif  // MESSENGER_H_

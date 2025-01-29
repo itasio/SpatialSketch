@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <chrono>
+#include <thread>
 
 using json = nlohmann::json;
 
@@ -56,6 +58,12 @@ void Messenger::sendRequest(request rq){
 
 }
 
+void Messenger::receiveEstimation() {
+    std::string topic_name = "estimation_topic";
+
+    this->consumeKafkaMsg(brokers, topic_name);
+}
+
 void Messenger::dr_cb(RdKafka::Message &message) {
     if (message.err()) {
         std::cout << "Message couldn't be delivered: " << message.errstr() << std::endl;
@@ -100,7 +108,7 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     if (resp != RdKafka::ERR_NO_ERROR) {
         std::cerr << "Failed to produce message: " << RdKafka::err2str(resp) << std::endl;
     } else {
-        std::cout << "Produced message to " << topic_name << std::endl;
+        std::cout << "Produced message"<< std::endl;
     }
 
     producer->flush(5000);
@@ -108,3 +116,74 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     delete conf;
 }
 
+void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &topic_name) {
+    std::string errstr;
+
+    // Create configuration object
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+    conf->set("bootstrap.servers", brokers, errstr);
+    conf->set("group.id", "spatialsketch_group", errstr);
+    conf->set("enable.auto.commit", "false", errstr); // Disable auto-commit to control offsets
+    conf->set("enable.partition.eof", "true", errstr); // emit eof whenever the consumer reaches the end of a partition.
+
+
+    // Create Kafka consumer
+    RdKafka::KafkaConsumer *consumer = RdKafka::KafkaConsumer::create(conf, errstr);
+    if (!consumer) {
+        std::cerr << "Failed to create consumer: " << errstr << std::endl;
+        return;
+    }
+
+    RdKafka::TopicPartition *tp = RdKafka::TopicPartition::create(topic_name, 0);
+
+    RdKafka::ErrorCode err_asgn = consumer->assign({tp});   //assign consumer to the topic+partition 
+
+    if (err_asgn != RdKafka::ERR_NO_ERROR) {
+        std::cerr << "Assignment failed: " << RdKafka::err2str(err_asgn) << std::endl;
+        return ;
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(3));   //wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
+
+    int64_t low, high;
+    if (consumer->get_watermark_offsets(topic_name, 0, &low, &high) != RdKafka::ERR_NO_ERROR ) {        // Get partition's offset range
+        std::cerr << "Getting offsets failed!" << std::endl;
+        return;
+    }
+    
+    if (high == 0) {
+        std::cerr << "Topic is empty, no messages to read!" << std::endl;
+        return;
+    }
+    
+    tp->set_offset(high - 1);   // seek to the last message
+   
+    RdKafka::ErrorCode err_seek = consumer->seek(*tp, 3000);  //find the last message of the topic
+
+    if (err_seek != RdKafka::ERR_NO_ERROR) {
+        std::cerr << "Seek failed: " << RdKafka::err2str(err_seek) << std::endl;
+        return;
+    }
+
+    RdKafka::Message *msg = consumer->consume(3000);    //consume the last message
+    
+    if (msg->err() == RdKafka::ERR_NO_ERROR) {
+        std::cout << "Received: " << std::string((char *)msg->payload(), msg->len()) << std::endl;
+        // consumer->commitSync();
+    } else if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
+        std::cout << "End of partition reached." << std::endl;
+    } else {
+        std::cerr << "Error: " << msg->errstr() << std::endl;
+    }
+
+    delete msg;
+    delete tp;
+
+    consumer->unassign();
+    consumer->close();
+    delete consumer;
+    delete conf;
+
+    RdKafka::wait_destroyed(5000);  // Wait max 5 seconds
+}
