@@ -954,7 +954,25 @@ std::vector<dyadic2D> SpatialSketch::GetDyadicIntervals(int x1, int y1, int x2, 
 bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, int &query_sum, int timestamp) {
     /*std::string*/ int key = DimToKey(n_ / (di.x2 - di.x1 + 1), n_ / (di.y2 - di.y1 + 1));
 
-    if (elastic_sketch_) {       
+    if (isMessengerUsed()) {
+        auto grid_ptr = sde_grids_.find(key);
+        if (grid_ptr != sde_grids_.end()) { //grid exists
+            int x_cell = di.x1/(di.x2-di.x1+1);
+            int y_cell = di.y1/(di.y2-di.y1+1);
+            // Check if the actual sketch is initialized, if it isn't then the value is simply zero
+            if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
+                // query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->query((uint8_t*) &item));
+                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, to_string(item));
+                mes_->sendRequest(est_rq);  //send estimate request message to SDE
+                // mes_->receiveEstimation();
+                int est = 0;
+                // TODO receive message from kafka estimation topic and pass the estimation
+                query_sum += (int) (di.coverage * est);
+            }
+            return true;
+        }
+        
+    } else if (elastic_sketch_) {       
         auto grid_ptr = es_grids_.find(key);
         if (grid_ptr != es_grids_.end()) {
             
@@ -962,6 +980,8 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
             int y_cell = di.y1/(di.y2-di.y1+1);
             // Check if the actual sketch is initialized, if it isn't then the value is simply zero
             if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
+                std::cout << "Now querying grid with key: " << key << " that has dims: " << KeyToDimString(key) << 
+                    " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
                 query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->query((uint8_t*) &item));
             }
  
@@ -1064,14 +1084,15 @@ int SpatialSketch::QueryFrequency(std::vector<range> ranges, long item, long ite
     std::vector<dyadic2D> dyadic_intervals;
     dyadic_intervals.reserve(levels_*levels_);
 
-    if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
-        nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
-    } else if (sketch_name_ == "ElasticSketch") {
-        nr_hashes_ = 0;
-    } else {
-        nr_hashes_ = sketch_->GetItemHashes(item, hashes_);
+    if (!isMessengerUsed()) {
+        if (sketch_name_.find(std::string("ECM")) != std::string::npos) {
+            nr_hashes_ = sketch_->GetItemHashes(item, hashes_long_);
+        } else if (sketch_name_ == "ElasticSketch") {
+            nr_hashes_ = 0;
+        } else {
+            nr_hashes_ = sketch_->GetItemHashes(item, hashes_);
+        }
     }
-
     // Query the sketch of every dyadic interval and accumulate the sum
     int count = 0;
     for (range r : ranges) {
@@ -1204,16 +1225,33 @@ int SpatialSketch::QueryCountDistinct(std::vector<range> ranges) {
 
 bool SpatialSketch::QueryDyadicIntervalMembership(dyadic2D di, long item, int &query_sum) {
     int key = DimToKey(n_ / (di.x2 - di.x1 + 1), n_ / (di.y2 - di.y1 + 1));
-    auto grid_ptr = grids_.find(key);
-    if (grid_ptr != grids_.end()) {
-        
-        int x_cell = di.x1/(di.x2-di.x1+1);
-        int y_cell = di.y1/(di.y2-di.y1+1);
-        // Check if the actual sketch is initialized, if it isn't then the value is simply zero
-        if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
-            query_sum += (int) (grid_ptr->second->cells[x_cell][y_cell]->QueryItem(item));
+
+    if (isMessengerUsed()) {
+        auto grid_ptr = sde_grids_.find(key);
+        if (grid_ptr != sde_grids_.end()) {
+            int x_cell = di.x1/(di.x2-di.x1+1);
+            int y_cell = di.y1/(di.y2-di.y1+1);
+            // Check if the actual sketch is initialized, if it isn't then the value is simply zero
+            if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
+                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, to_string(item));
+                mes_->sendRequest(est_rq);  //send estimate request message to SDE
+                int est;
+                // TODO receive message from kafka estimation topic and pass the estimation
+                query_sum += (int) est;               
+            }
+            return true;
         }
-        return true;
+    } else {
+        auto grid_ptr = grids_.find(key);
+        if (grid_ptr != grids_.end()) {
+            int x_cell = di.x1/(di.x2-di.x1+1);
+            int y_cell = di.y1/(di.y2-di.y1+1);
+            // Check if the actual sketch is initialized, if it isn't then the value is simply zero
+            if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
+                query_sum += (int) (grid_ptr->second->cells[x_cell][y_cell]->QueryItem(item));
+            }
+            return true;
+        }
     }
     return false;
 }
@@ -1260,7 +1298,11 @@ int SpatialSketch::QueryMembership(std::vector<range> ranges, long item) {
     std::vector<dyadic2D> dyadic_intervals;
     dyadic_intervals.reserve(levels_*levels_);
 
-    nr_hashes_ = sketch_->repetitions_; //GetItemHashes(item, hashes_);
+    if (isMessengerUsed())
+    {
+        nr_hashes_ = sketch_->repetitions_; //GetItemHashes(item, hashes_);
+    }
+    
 
     // Query the sketch of every dyadic interval and accumulate the sum
     int count = 0;
