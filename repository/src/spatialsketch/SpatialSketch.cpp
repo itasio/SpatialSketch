@@ -373,10 +373,11 @@ void SpatialSketch::MemoryCheck() {
 
 request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq, std::string key_to_query){
     request rq ;
-    if (sketches.size() > 1 && type_of_rq != RQ_ID_EST_MANY_SYN)
-    {
-
-        throw std::invalid_argument("Operation not supported. Only query multiple synopses is allowed.");
+    if (sketches.size() == 0){   
+        throw std::invalid_argument("At least one sketch must be given as parameter.");
+    }
+    if (sketches.size() > 1 && type_of_rq != RQ_ID_EST_MANY_SYN){
+        throw std::invalid_argument("Operation not supported. Only query (estimate) multiple synopses is allowed.");
     }
     //todo check all conditions are met
     if (type_of_rq == RQ_ID_ADD_SYN || type_of_rq == RQ_ID_DEL_SYN) {   // create an add or delete synopsis request
@@ -390,6 +391,9 @@ request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_
         rq.UID = sk.uID;
         return rq;
     } else if (type_of_rq == RQ_ID_EST_ONE_SYN) {
+        if (key_to_query == ""){
+            throw std::invalid_argument("A key must be given for querying a synopsis.");
+        }
         sde_sketch sk = sketches[0];
         rq.DataSetkey = sk.DataSetkey;
         rq.NoOfP = sk.NoOfP;
@@ -401,6 +405,9 @@ request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_
         return rq;
 
     }else if (type_of_rq == RQ_ID_EST_MANY_SYN) {
+        if (key_to_query == ""){
+            throw std::invalid_argument("A key must be given for querying a synopsis.");
+        }
         rq.DataSetkey = "";
         std::string str = "";   //  "{\"1110\":3,\"2500\":3}" 
         for (size_t i = 0; i < sketches.size(); i++) {
@@ -424,7 +431,7 @@ request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_
 
         return rq;
     }else {
-        throw std::invalid_argument("Not implemented this operation yet.");
+        throw std::invalid_argument("Not implemented this type of operation yet.");
     }
 }
 
@@ -964,7 +971,7 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
                 // query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->query((uint8_t*) &item));
                 request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, to_string(item));
                 mes_->sendRequest(est_rq);  //send estimate request message to SDE
-                // mes_->receiveEstimation();
+                mes_->receiveEstimation();
                 int est = 0;
                 // TODO receive message from kafka estimation topic and pass the estimation
                 query_sum += (int) (di.coverage * est);
