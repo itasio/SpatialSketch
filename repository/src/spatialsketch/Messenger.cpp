@@ -58,10 +58,10 @@ void Messenger::sendRequest(request rq){
 
 }
 
-void Messenger::receiveEstimation() {
+std::optional<std::pair<long, std::string>> Messenger::receiveEstimation() {
     std::string topic_name = "estimation_topic";
 
-    this->consumeKafkaMsg(brokers, topic_name);
+    return this->consumeKafkaMsg(brokers, topic_name);
 }
 
 void Messenger::dr_cb(RdKafka::Message &message) {
@@ -69,9 +69,9 @@ void Messenger::dr_cb(RdKafka::Message &message) {
         std::cout << "Message couldn't be delivered: " << message.errstr() << std::endl;
     } 
     else {
-        std::cout << "Message delivered to topic " << message.topic_name()
-                  << " [" << message.partition() << "] at offset "
-                  << message.offset() << std::endl;
+        // std::cout << "Message delivered to topic " << message.topic_name()
+        //           << " [" << message.partition() << "] at offset "
+        //           << message.offset() << std::endl;
     }
 }
 
@@ -91,7 +91,7 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
         std::cerr << "Failed to create producer: " << errstr << std::endl;
         return;
     }
-
+    
     // Produce the message
     RdKafka::ErrorCode resp = producer->produce(
         topic_name,                      // Topic name
@@ -107,8 +107,6 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     
     if (resp != RdKafka::ERR_NO_ERROR) {
         std::cerr << "Failed to produce message: " << RdKafka::err2str(resp) << std::endl;
-    } else {
-        std::cout << "Produced message"<< std::endl;
     }
 
     producer->flush(5000);
@@ -116,7 +114,9 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     delete conf;
 }
 
-void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &topic_name) {
+std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &topic_name) {
+
+    std::pair<long, std::string> est_key;
     std::string errstr;
 
     // Create configuration object
@@ -132,7 +132,7 @@ void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &t
     RdKafka::KafkaConsumer *consumer = RdKafka::KafkaConsumer::create(conf, errstr);
     if (!consumer) {
         std::cerr << "Failed to create consumer: " << errstr << std::endl;
-        return;
+        return std::nullopt;
     }
 
     RdKafka::TopicPartition *tp = RdKafka::TopicPartition::create(topic_name, 0);
@@ -141,7 +141,7 @@ void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &t
 
     if (err_asgn != RdKafka::ERR_NO_ERROR) {
         std::cerr << "Assignment failed: " << RdKafka::err2str(err_asgn) << std::endl;
-        return ;
+        return std::nullopt; 
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(3));   //wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
@@ -149,12 +149,12 @@ void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &t
     int64_t low, high;
     if (consumer->get_watermark_offsets(topic_name, 0, &low, &high) != RdKafka::ERR_NO_ERROR ) {        // Get partition's offset range
         std::cerr << "Getting offsets failed!" << std::endl;
-        return;
+        return std::nullopt;
     }
     
     if (high == 0) {
         std::cerr << "Topic is empty, no messages to read!" << std::endl;
-        return;
+        return std::nullopt;
     }
     
     tp->set_offset(high - 1);   // seek to the last message
@@ -163,27 +163,41 @@ void Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &t
 
     if (err_seek != RdKafka::ERR_NO_ERROR) {
         std::cerr << "Seek failed: " << RdKafka::err2str(err_seek) << std::endl;
-        return;
+        return std::nullopt;
     }
 
     RdKafka::Message *msg = consumer->consume(3000);    //consume the last message
     
     if (msg->err() == RdKafka::ERR_NO_ERROR) {
-        std::cout << "Received: " << std::string((char *)msg->payload(), msg->len()) << std::endl;
+
+        std::string payload = std::string((char *)msg->payload(), msg->len());
+        std::cout << "Received: " << payload << std::endl;
         // consumer->commitSync();
+        json jmsg = json::parse(payload);
+        long est = jmsg["estimation"];
+        if (jmsg.contains("estimation") && jmsg.contains("param")){
+            long est = jmsg["estimation"];
+            std::string key_queried = jmsg["param"][0];
+            est_key = {est, key_queried};
+        }else{
+            return std::nullopt;
+        }
     } else if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
         std::cout << "End of partition reached." << std::endl;
+        return std::nullopt;
     } else {
         std::cerr << "Error: " << msg->errstr() << std::endl;
+        return std::nullopt;
     }
 
     delete msg;
     delete tp;
-
     consumer->unassign();
     consumer->close();
     delete consumer;
     delete conf;
 
     RdKafka::wait_destroyed(5000);  // Wait max 5 seconds
+
+    return est_key;
 }

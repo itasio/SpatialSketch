@@ -379,7 +379,6 @@ request SpatialSketch::CreateRequest(std::vector<sde_sketch> sketches, int type_
     if (sketches.size() > 1 && type_of_rq != RQ_ID_EST_MANY_SYN){
         throw std::invalid_argument("Operation not supported. Only query (estimate) multiple synopses is allowed.");
     }
-    //todo check all conditions are met
     if (type_of_rq == RQ_ID_ADD_SYN || type_of_rq == RQ_ID_DEL_SYN) {   // create an add or delete synopsis request
         sde_sketch sk = sketches[0];
         rq.DataSetkey = sk.DataSetkey;
@@ -969,12 +968,18 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
             // Check if the actual sketch is initialized, if it isn't then the value is simply zero
             if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
                 // query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->query((uint8_t*) &item));
-                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, to_string(item));
+                std::string item_str = to_string(item);
+                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, item_str);
                 mes_->sendRequest(est_rq);  //send estimate request message to SDE
-                mes_->receiveEstimation();
-                int est = 0;
-                // TODO receive message from kafka estimation topic and pass the estimation
-                query_sum += (int) (di.coverage * est);
+                auto est_key = mes_->receiveEstimation();
+                if (!est_key){
+                    std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
+                    return true;
+                }else if (est_key->second != item_str){
+                    std::cout << "Query for key: "<<item_str <<" returned estimation for key: "<< est_key->second <<std::endl;
+                    return true;
+                }
+                query_sum += (int) (di.coverage * est_key->first);
             }
             return true;
         }
@@ -1240,11 +1245,18 @@ bool SpatialSketch::QueryDyadicIntervalMembership(dyadic2D di, long item, int &q
             int y_cell = di.y1/(di.y2-di.y1+1);
             // Check if the actual sketch is initialized, if it isn't then the value is simply zero
             if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
-                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, to_string(item));
+                std::string item_str = to_string(item);
+                request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, item_str);
                 mes_->sendRequest(est_rq);  //send estimate request message to SDE
-                int est;
-                // TODO receive message from kafka estimation topic and pass the estimation
-                query_sum += (int) est;               
+                auto est_key = mes_->receiveEstimation();
+                if (!est_key){
+                    std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
+                    return true;
+                }else if (est_key->second != item_str){
+                    std::cout << "Query for key: "<<item_str <<" returned estimation for key: "<< est_key->second <<std::endl;
+                    return true;
+                }
+                query_sum += (int) est_key->first;               
             }
             return true;
         }

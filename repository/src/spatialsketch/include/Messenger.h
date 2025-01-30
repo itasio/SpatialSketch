@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <librdkafka/rdkafkacpp.h>
+#include <optional>
 
 // Synopsis ID for CountMin sketch
 #define CM_ID (1)
@@ -52,14 +53,14 @@ class Messenger : public RdKafka::DeliveryReportCb {
         Messenger(std::string &brokers);
         void sendData(Data d);
         void sendRequest(request rq);
-        void receiveEstimation();
+        std::optional<std::pair<long, std::string>> receiveEstimation();
         void dr_cb(RdKafka::Message &message) override;
         
         std::string brokers; //kafka listener
 
     private:
         void sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message);
-        void consumeKafkaMsg(const std::string &brokers, const std::string &topic_name);
+        std::optional<std::pair<long, std::string>> consumeKafkaMsg(const std::string &brokers, const std::string &topic_name);
 };
 
 #endif  // MESSENGER_H_
