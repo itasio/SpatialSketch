@@ -143,7 +143,7 @@ class SpatialSketch {
          *                   default is -1 which implies there is no limit
          * @note Exception handling for very small memory limits is not implemented
         */
-        SpatialSketch(std::optional<Messenger> mes, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
+        SpatialSketch(Messenger&& m, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
 
         // Cleanup
         ~SpatialSketch();
@@ -216,8 +216,8 @@ class SpatialSketch {
             return mes_.has_value();
         }
 
-        void setMessenger(Messenger m){
-            mes_ = m;
+        void setMessenger(Messenger&& m){
+            mes_ = std::move(m);
         }
 
         sde_sketch* InitSdeSketch(int key, int x_cell, int y_cell);

@@ -5,6 +5,8 @@
 #include <iostream>
 #include <librdkafka/rdkafkacpp.h>
 #include <optional>
+#include <future>
+#include <memory>
 
 // Synopsis ID for CountMin sketch
 #define CM_ID (1)
@@ -51,15 +53,34 @@ typedef struct Data {
 class Messenger : public RdKafka::DeliveryReportCb {
     public:
         Messenger(std::string &brokers);
-        void sendData(Data d);
-        void sendRequest(request rq);
+        // Move constructor (needed because std::promise is non-copyable)
+        Messenger(Messenger&& other) noexcept
+            : brokers(std::move(other.brokers)),
+              delivery_promise(std::move(other.delivery_promise)) {}
+
+        // Delete copy constructor and assignment operator (because of std::promise)
+        Messenger(const Messenger&) = delete;
+        Messenger& operator=(const Messenger&) = delete;
+
+        // Move assignment operator (needed for std::optional)
+        Messenger& operator=(Messenger&& other) noexcept {
+            if (this != &other) {
+                delivery_promise = std::move(other.delivery_promise);
+                brokers = std::move(other.brokers);
+            }
+            return *this;
+        }
+
+        bool sendData(Data d);
+        bool sendRequest(request rq);
         std::optional<std::pair<long, std::string>> receiveEstimation();
         void dr_cb(RdKafka::Message &message) override;
         
         std::string brokers; //kafka listener
+        std::promise<bool> delivery_promise;
 
     private:
-        void sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message);
+        bool sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message);
         std::optional<std::pair<long, std::string>> consumeKafkaMsg(const std::string &brokers, const std::string &topic_name);
 };
 

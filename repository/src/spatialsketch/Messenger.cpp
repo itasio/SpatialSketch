@@ -38,22 +38,22 @@ void to_json(json& j, const Data& d) {
     };
 }
 
-void Messenger::sendData(Data d)
+bool Messenger::sendData(Data d)
 {
     std::string topic_name = "data_topic";
     json j = d;
     std::string msg = j.dump(4);    // serialization with pretty printing
-    this->sendKafkaMsg(brokers, topic_name, msg);
+    return this->sendKafkaMsg(brokers, topic_name, msg);
 }
 
-void Messenger::sendRequest(request rq){
+bool Messenger::sendRequest(request rq){
     std::string topic_name = "request_topic";
 
     json j = rq;
 
     std::string msg = j.dump(4);    // serialization with pretty printing
 
-    this->sendKafkaMsg(brokers, topic_name, msg);
+    return this->sendKafkaMsg(brokers, topic_name, msg);
 
 
 }
@@ -66,30 +66,35 @@ std::optional<std::pair<long, std::string>> Messenger::receiveEstimation() {
 
 void Messenger::dr_cb(RdKafka::Message &message) {
     if (message.err()) {
-        std::cout << "Message couldn't be delivered: " << message.errstr() << std::endl;
+        std::cerr << "Message couldn't be delivered: " << message.errstr() << std::endl;
+        delivery_promise.set_value(false);
     } 
     else {
+        delivery_promise.set_value(true);
         // std::cout << "Message delivered to topic " << message.topic_name()
         //           << " [" << message.partition() << "] at offset "
         //           << message.offset() << std::endl;
     }
 }
 
-void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message){
+bool Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message){
     std::string errstr;
-
+    
+    delivery_promise = std::promise<bool>();  // Reset promise
+    std::future<bool> future = delivery_promise.get_future();  // Get future
+    
     RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
     
     if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
         std::cerr << "Failed to set brokers: " << errstr << std::endl;
-        return;
+        return false;
     }
 
     conf->set("dr_cb", this, errstr);
     RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
     if (!producer) {
         std::cerr << "Failed to create producer: " << errstr << std::endl;
-        return;
+        return false;
     }
     
     // Produce the message
@@ -112,6 +117,7 @@ void Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     producer->flush(5000);
     delete producer;
     delete conf;
+    return future.get();  // Wait for delivery confirmation
 }
 
 std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &topic_name) {

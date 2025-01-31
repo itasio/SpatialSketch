@@ -104,7 +104,7 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
         }
 }
 
-SpatialSketch::SpatialSketch(std::optional<Messenger> mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
+SpatialSketch::SpatialSketch(Messenger&& mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
     if(sketch_name != "CM" && sketch_name != "BF"){
             // throw "The sketch "+ sketch_name +" is not implemented yet";
             throw std::invalid_argument("The sketch "+ sketch_name +" is not implemented yet");
@@ -116,7 +116,7 @@ SpatialSketch::SpatialSketch(std::optional<Messenger> mes, std::string sketch_na
     levels_ = std::floor(std::log2(n_)) + 1;
     sketch_name_ = sketch_name;
     domain_size_ = domain_size;
-    mes_ = mes;
+    mes_ = std::move(mes);
 
     // Create list of #levels_ hash maps, where the end of the list contains the highest resolution and the last element contains the single cell grid
     sde_grids_.reserve(levels_*levels_);
@@ -482,13 +482,14 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             int x_cell = x1/(x2-x1+1);
             int y_cell = y1/(y2-y1+1);
 
-            std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
-             " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {  // Sketch in this cell is not initialized
                 sde_sketch* sk = InitSdeSketch(key, x_cell, y_cell);
                 request rq = CreateRequest({*sk}, RQ_ID_ADD_SYN);    //create add synopsis request for this sketch
-                mes_->sendRequest(rq);  //send request message to SDE
-                //TODO an success tote orise to grid me to sk alliws delete sk; // Deallocate the memory sk = nullptr; //ensures it doesn’t point to invalid memory.
+                if(!mes_->sendRequest(rq)){
+                    throw std::runtime_error("Can't send add synopsis request. An error occured while sending message to SDE.");
+                }
+                std::cout << "Updated grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
+                " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
                 grid_ptr->second->cells[x_cell][y_cell] = sk;
 
                 // Increment counters
@@ -509,8 +510,9 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             d.keyToSend = to_string(item);
             d.valueFieldName = local_sk->valueIndex;
             d.valueToSend = to_string(value);
-            mes_->sendData(d);
-             
+            if(!mes_->sendData(d)){
+                throw std::runtime_error("Can't send data: "+ to_string(item) +"to update synopsis: " + d.DataSetkey + " An error occured while sending message to SDE.");
+            }
         }
     } else if (elastic_sketch_) {
         std::unordered_map<int, es_grid*>::iterator grid_ptr = es_grids_.find(key);
@@ -970,7 +972,10 @@ bool SpatialSketch::QueryDyadicInterval(dyadic2D di, long item, long item_end, i
                 // query_sum += (int) (di.coverage * grid_ptr->second->cells[x_cell][y_cell]->query((uint8_t*) &item));
                 std::string item_str = to_string(item);
                 request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, item_str);
-                mes_->sendRequest(est_rq);  //send estimate request message to SDE
+                if(!mes_->sendRequest(est_rq)){
+                    throw std::runtime_error("Can't send query synopsis request. An error occured while sending message to SDE.");
+                }
+                  //send estimate request message to SDE
                 auto est_key = mes_->receiveEstimation();
                 if (!est_key){
                     std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
@@ -1247,7 +1252,9 @@ bool SpatialSketch::QueryDyadicIntervalMembership(dyadic2D di, long item, int &q
             if (grid_ptr->second->cells[x_cell][y_cell] != NULL) {
                 std::string item_str = to_string(item);
                 request est_rq = CreateRequest({*grid_ptr->second->cells[x_cell][y_cell]}, RQ_ID_EST_ONE_SYN, item_str);
-                mes_->sendRequest(est_rq);  //send estimate request message to SDE
+                if(!mes_->sendRequest(est_rq)){
+                    throw std::runtime_error("Can't send query synopsis request. An error occured while sending message to SDE.");
+                }
                 auto est_key = mes_->receiveEstimation();
                 if (!est_key){
                     std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
