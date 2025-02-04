@@ -83,7 +83,7 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
                 current_memory_ += (x_dim * y_dim * sizeof(void*)); // data list
             }
         }
-        std::cout << grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
+        std::cout << grids_.size() <<" grids created and levels are: " << levels_ <<std::endl;
     }
 
     //SetupTopLevelIntervals(n_);
@@ -104,7 +104,7 @@ SpatialSketch::SpatialSketch(std::string sketch_name, int n, long memory_lim, fl
         }
 }
 
-SpatialSketch::SpatialSketch(Messenger&& mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
+SpatialSketch::SpatialSketch(std::shared_ptr<Messenger> mes, std::string sketch_name, int n, long memory_lim, float epsilon, float delta, int domain_size){
     if(sketch_name != "CM" && sketch_name != "BF"){
             // throw "The sketch "+ sketch_name +" is not implemented yet";
             throw std::invalid_argument("The sketch "+ sketch_name +" is not implemented yet");
@@ -116,8 +116,7 @@ SpatialSketch::SpatialSketch(Messenger&& mes, std::string sketch_name, int n, lo
     levels_ = std::floor(std::log2(n_)) + 1;
     sketch_name_ = sketch_name;
     domain_size_ = domain_size;
-    mes_ = std::move(mes);
-
+    mes_ = mes;
     // Create list of #levels_ hash maps, where the end of the list contains the highest resolution and the last element contains the single cell grid
     sde_grids_.reserve(levels_*levels_);
     for (int x_pow = 0; x_pow < levels_; x_pow++) {
@@ -132,7 +131,7 @@ SpatialSketch::SpatialSketch(Messenger&& mes, std::string sketch_name, int n, lo
         }
     }
 
-    std::cout << sde_grids_.size() <<" grids created  and levels are: " << levels_ <<std::endl;
+    std::cout << sde_grids_.size() <<" grids created and levels are: " << levels_ <<std::endl;
 
     //SetupTopLevelIntervals(n_);
     top_level_intervals_ = {dyadic1D(1, n_)};  // simply replace for SetupTopLevelIntervals() when using grids fo powers of 2

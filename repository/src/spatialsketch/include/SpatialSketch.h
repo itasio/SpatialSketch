@@ -143,7 +143,7 @@ class SpatialSketch {
          *                   default is -1 which implies there is no limit
          * @note Exception handling for very small memory limits is not implemented
         */
-        SpatialSketch(Messenger&& m, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
+        SpatialSketch(std::shared_ptr<Messenger> mes, std::string sketch, int n, long memory_lim=-1, float epsilon=2.8f, float delta=0.5f, int domain_size=50000);
 
         // Cleanup
         ~SpatialSketch();
@@ -176,7 +176,7 @@ class SpatialSketch {
     private:
 
         // The kafka client to send messages to kafka
-        std::optional<Messenger> mes_;
+        std::shared_ptr<Messenger> mes_;
         // Hash map that points to the sde grids
         std::unordered_map<int, sde_grid*> sde_grids_;
         // The number of requests sent to SDE for estimating multiple synopses. Must be different for every request.
@@ -213,11 +213,14 @@ class SpatialSketch {
 
 
         inline bool isMessengerUsed() {
-            return mes_.has_value();
+            if(mes_)
+                return true;
+            else
+                return false;
         }
 
-        void setMessenger(Messenger&& m){
-            mes_ = std::move(m);
+        void setMessenger(std::shared_ptr<Messenger> m){
+            mes_ = m;
         }
 
         sde_sketch* InitSdeSketch(int key, int x_cell, int y_cell);

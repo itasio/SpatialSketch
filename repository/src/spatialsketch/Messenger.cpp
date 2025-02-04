@@ -7,8 +7,71 @@
 
 using json = nlohmann::json;
 
-Messenger::Messenger(std::string &brokers){
+Messenger::Messenger(std::string &brokers, std::string &request_topic, std::string &data_topic, std::string &estimation_topic){
     this->brokers = brokers;
+    this->request_topic = request_topic;
+    this->data_topic = data_topic;
+    this->estimation_topic = estimation_topic;
+
+    initConsumer();
+    initProducer();
+
+}
+
+void Messenger::initConsumer(){
+    std::string errstr;
+
+    // Create configuration object
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+    conf->set("bootstrap.servers", brokers, errstr);
+    conf->set("group.id", "spatialsketch_group", errstr);
+    conf->set("enable.auto.commit", "false", errstr); // Disable auto-commit to control offsets
+    conf->set("enable.partition.eof", "true", errstr); // emit eof whenever the consumer reaches the end of a partition.
+
+    consumer = std::shared_ptr<RdKafka::KafkaConsumer>(RdKafka::KafkaConsumer::create(conf, errstr));
+    if (!consumer) {
+        throw std::runtime_error("Can't set up kafka consumer.");
+    }
+
+    RdKafka::TopicPartition *tp = RdKafka::TopicPartition::create(estimation_topic, 0);
+
+    RdKafka::ErrorCode err_asgn = consumer->assign({tp});   //assign consumer to the topic+partition 
+
+    if (err_asgn != RdKafka::ERR_NO_ERROR) {
+        throw std::runtime_error("Can't set up kafka consumer to topic, partition.");
+    }
+    delete conf;
+}
+
+void Messenger::initProducer(){
+    std::string errstr;
+
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
+        throw std::runtime_error("Failed to set brokers for kafka producer");
+    }
+    conf->set("dr_cb", this, errstr);
+    producer = std::shared_ptr<RdKafka::Producer>(RdKafka::Producer::create(conf, errstr));
+    if (!producer) {
+        throw std::runtime_error("Failed to create producer");
+    }
+    delete conf;
+}
+
+Messenger::~Messenger(){
+    if (producer){
+        producer->flush(3000);
+        // producer.reset();       //not needed with smart pointers
+    }
+    if (consumer){
+        consumer->unassign();
+        consumer->close();
+        // consumer.reset();           //not needed with smart pointers
+    }
+
+    
 }
 
 // Define how to convert request  to JSON
@@ -38,30 +101,21 @@ void to_json(json& j, const Data& d) {
     };
 }
 
-bool Messenger::sendData(Data d)
-{
-    std::string topic_name = "data_topic";
+bool Messenger::sendData(Data d){
     json j = d;
     std::string msg = j.dump(4);    // serialization with pretty printing
-    return this->sendKafkaMsg(brokers, topic_name, msg);
+    return this->sendKafkaMsg(msg, data_topic);
 }
 
 bool Messenger::sendRequest(request rq){
-    std::string topic_name = "request_topic";
-
     json j = rq;
-
     std::string msg = j.dump(4);    // serialization with pretty printing
 
-    return this->sendKafkaMsg(brokers, topic_name, msg);
-
-
+    return this->sendKafkaMsg(msg, request_topic);
 }
 
 std::optional<std::pair<long, std::string>> Messenger::receiveEstimation() {
-    std::string topic_name = "estimation_topic";
-
-    return this->consumeKafkaMsg(brokers, topic_name);
+    return this->consumeKafkaMsg();
 }
 
 void Messenger::dr_cb(RdKafka::Message &message) {
@@ -77,29 +131,13 @@ void Messenger::dr_cb(RdKafka::Message &message) {
     }
 }
 
-bool Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message){
-    std::string errstr;
-    
-    delivery_promise = std::promise<bool>();  // Reset promise
+bool Messenger::sendKafkaMsg(const std::string &message, const std::string &topic){
+    this->delivery_promise = std::promise<bool>();  // Reset promise
     std::future<bool> future = delivery_promise.get_future();  // Get future
-    
-    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    
-    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
-        std::cerr << "Failed to set brokers: " << errstr << std::endl;
-        return false;
-    }
 
-    conf->set("dr_cb", this, errstr);
-    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
-    if (!producer) {
-        std::cerr << "Failed to create producer: " << errstr << std::endl;
-        return false;
-    }
-    
     // Produce the message
     RdKafka::ErrorCode resp = producer->produce(
-        topic_name,                      // Topic name
+        topic,                           // Topic name
         RdKafka::Topic::PARTITION_UA,    // Unassigned partition
         RdKafka::Producer::RK_MSG_COPY,  // Copy payload flag
         const_cast<char *>(message.c_str()), // Message payload
@@ -115,54 +153,34 @@ bool Messenger::sendKafkaMsg(const std::string &brokers, const std::string &topi
     }
 
     producer->flush(5000);
-    delete producer;
-    delete conf;
+    // delete producer;
     return future.get();  // Wait for delivery confirmation
 }
 
-std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg(const std::string &brokers, const std::string &topic_name) {
-
+std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg() {
+    // std::this_thread::sleep_for(std::chrono::seconds(1));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001 or message isn't ready at the topic yet
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
     std::pair<long, std::string> est_key;
-    std::string errstr;
-
-    // Create configuration object
-    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-
-    conf->set("bootstrap.servers", brokers, errstr);
-    conf->set("group.id", "spatialsketch_group", errstr);
-    conf->set("enable.auto.commit", "false", errstr); // Disable auto-commit to control offsets
-    conf->set("enable.partition.eof", "true", errstr); // emit eof whenever the consumer reaches the end of a partition.
-
-
-    // Create Kafka consumer
-    RdKafka::KafkaConsumer *consumer = RdKafka::KafkaConsumer::create(conf, errstr);
-    if (!consumer) {
-        std::cerr << "Failed to create consumer: " << errstr << std::endl;
-        return std::nullopt;
-    }
-
-    RdKafka::TopicPartition *tp = RdKafka::TopicPartition::create(topic_name, 0);
-
-    RdKafka::ErrorCode err_asgn = consumer->assign({tp});   //assign consumer to the topic+partition 
-
-    if (err_asgn != RdKafka::ERR_NO_ERROR) {
-        std::cerr << "Assignment failed: " << RdKafka::err2str(err_asgn) << std::endl;
-        return std::nullopt; 
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(3));   //wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
 
     int64_t low, high;
-    if (consumer->get_watermark_offsets(topic_name, 0, &low, &high) != RdKafka::ERR_NO_ERROR ) {        // Get partition's offset range
+    if (consumer->get_watermark_offsets(estimation_topic, 0, &low, &high) != RdKafka::ERR_NO_ERROR ) {        // Get partition's offset range
         std::cerr << "Getting offsets failed!" << std::endl;
         return std::nullopt;
     }
-    
     if (high == 0) {
-        std::cerr << "Topic is empty, no messages to read!" << std::endl;
+        std::cerr << "Topic "<< estimation_topic <<" is empty, no messages to read!" << std::endl;
         return std::nullopt;
     }
     
+    std::vector<RdKafka::TopicPartition *> tp_vector;
+    RdKafka::ErrorCode err =  consumer->assignment(tp_vector);
+
+    if (err != RdKafka::ERR_NO_ERROR) {
+        std::cerr << "Failed to get assigned partitions: " << RdKafka::err2str(err) << std::endl;
+        return std::nullopt;
+    }
+
+    RdKafka::TopicPartition *tp = tp_vector[0]; //consumer is assigned only in one topic
     tp->set_offset(high - 1);   // seek to the last message
    
     RdKafka::ErrorCode err_seek = consumer->seek(*tp, 3000);  //find the last message of the topic
@@ -197,13 +215,7 @@ std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg(const std
     }
 
     delete msg;
-    delete tp;
-    consumer->unassign();
-    consumer->close();
-    delete consumer;
-    delete conf;
-
-    RdKafka::wait_destroyed(5000);  // Wait max 5 seconds
-
+    RdKafka::TopicPartition::destroy(tp_vector);
+    
     return est_key;
 }

@@ -52,24 +52,35 @@ typedef struct Data {
 
 class Messenger : public RdKafka::DeliveryReportCb {
     public:
-        Messenger(std::string &brokers);
-        // Move constructor (needed because std::promise is non-copyable)
-        Messenger(Messenger&& other) noexcept
-            : brokers(std::move(other.brokers)),
-              delivery_promise(std::move(other.delivery_promise)) {}
+        Messenger(std::string &brokers, std::string &request_topic, std::string &data_topic, std::string &estimation_topic);
 
-        // Delete copy constructor and assignment operator (because of std::promise)
-        Messenger(const Messenger&) = delete;
+        Messenger(Messenger&& other) noexcept   // Move constructor (needed because std::promise is non-copyable)
+            :   brokers(std::move(other.brokers)),
+                delivery_promise(std::move(other.delivery_promise)),
+                request_topic(std::move(other.request_topic)),
+                data_topic(std::move(other.data_topic)),
+                estimation_topic(std::move(other.estimation_topic)),
+                producer(std::move(other.producer)),
+                consumer(std::move(other.consumer)) {}
+
+        Messenger(const Messenger&) = delete;   // Delete copy constructor and assignment operator (because of std::promise)
         Messenger& operator=(const Messenger&) = delete;
-
-        // Move assignment operator (needed for std::optional)
-        Messenger& operator=(Messenger&& other) noexcept {
+        
+        Messenger& operator=(Messenger&& other) noexcept {  // Move assignment operator (needed for std::optional)
             if (this != &other) {
-                delivery_promise = std::move(other.delivery_promise);
                 brokers = std::move(other.brokers);
+                delivery_promise = std::move(other.delivery_promise);
+                request_topic = std::move(other.request_topic);
+                data_topic = std::move(other.data_topic);
+                estimation_topic = std::move(other.estimation_topic);
+                producer = std::move(other.producer);
+                consumer = std::move(other.consumer);
+
             }
             return *this;
         }
+        
+        ~Messenger();   // Cleanup
 
         bool sendData(Data d);
         bool sendRequest(request rq);
@@ -78,10 +89,20 @@ class Messenger : public RdKafka::DeliveryReportCb {
         
         std::string brokers; //kafka listener
         std::promise<bool> delivery_promise;
+        std::shared_ptr<RdKafka::Producer> producer;
+        std::shared_ptr<RdKafka::KafkaConsumer> consumer;
+        // The topic to send requests
+        std::string request_topic;
+        // The topic to send data
+        std::string data_topic;
+        // The topic to receive messages
+        std::string estimation_topic;
 
     private:
-        bool sendKafkaMsg(const std::string &brokers, const std::string &topic_name, const std::string &message);
-        std::optional<std::pair<long, std::string>> consumeKafkaMsg(const std::string &brokers, const std::string &topic_name);
+        void initConsumer();
+        void initProducer();
+        bool sendKafkaMsg(const std::string &message, const std::string &topic);
+        std::optional<std::pair<long, std::string>> consumeKafkaMsg();
 };
 
 #endif  // MESSENGER_H_
