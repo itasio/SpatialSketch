@@ -1323,7 +1323,7 @@ int SpatialSketch::QueryMembership(std::vector<range> ranges, long item) {
     std::vector<dyadic2D> dyadic_intervals;
     dyadic_intervals.reserve(levels_*levels_);
 
-    if (isMessengerUsed())
+    if (!isMessengerUsed())
     {
         nr_hashes_ = sketch_->repetitions_; //GetItemHashes(item, hashes_);
     }
