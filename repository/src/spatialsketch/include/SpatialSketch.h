@@ -274,7 +274,7 @@ class SpatialSketch {
         }
 
         std::string KeyToDimString(int key) {
-            return std::to_string(key % (n_+1)) + "," + std::to_string(key / (n_+1));
+            return std::to_string(key % (n_+1)) + "x" + std::to_string(key / (n_+1));
         }
 
         // Convert any 2d range to a string to be used as the key in hash maps

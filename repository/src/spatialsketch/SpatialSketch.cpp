@@ -180,7 +180,7 @@ void SpatialSketch::PrintCoverage() {
         else
             num = grids_[DimToKey(n_,n_)]->nr_init_sketches;
 
-        std::cout << "Spatialsketch nr of initialized sketches " << num  << std::endl;
+        std::cout << "Spatialsketch nr of initialized sketches in the grid with max resolution:" << num  << std::endl;
     }
 }
 
@@ -444,8 +444,8 @@ sde_sketch *SpatialSketch::InitSdeSketch(int key, int x_cell, int y_cell){
     belong in a grid with identical dimensions, are positioned in identical grid coordinates,
     but belong in two different instances of Spatialsketch e.g spatialsketch that uses CM sketches and another that uses BloomFilter */
 
-    // e.g. 2,2_[0,0]_12345 grid has 2x2 dims, sketch is in [0,0] coordinates of grid, hash code of sketch is ...
-    sk->DataSetkey =  KeyToDimString(key) +"_[" +xCoord +","+ yCoord+"]_" + to_string(sk->hashCode());  
+    // e.g. 2x2_[0.0]_12345 grid has 2x2 dims, sketch is in [0,0] coordinates of grid, hash code of sketch is ...
+    sk->DataSetkey =  KeyToDimString(key) +"_[" +xCoord +"."+ yCoord+"]_" + to_string(sk->hashCode());  
     sk->uID = stoi(combStr);
     sk->StreamID = sk->DataSetkey;
     sk->NoOfP = 3;
@@ -487,8 +487,8 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
                 if(!mes_->sendRequest(rq)){
                     throw std::runtime_error("Can't send add synopsis request. An error occured while sending message to SDE.");
                 }
-                std::cout << "Updated grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
-                " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
+                std::cout << "Initialized sketch in position: [" << x_cell << "," << y_cell << "]"<< " in the grid that has key: " 
+                << key << " and dims: " << KeyToDimString(key) << " with item: " << item <<std::endl;
                 grid_ptr->second->cells[x_cell][y_cell] = sk;
 
                 // Increment counters
@@ -551,7 +551,7 @@ void SpatialSketch::UpdateInterval(int x1, int y1, int x2, int y2, long item, in
             int y_cell = y1/(y2-y1+1);
 
             std::cout << "Now update grid with key: " << key << " that has dims: " << KeyToDimString(key) <<
-             " in position: [" << x_cell << "," << y_cell << "]"<< " for item: " << item <<std::endl;
+             " in position: [" << x_cell << "," << y_cell << "]"<< " with item: " << item <<std::endl;
 
             if (grid_ptr->second->cells[x_cell][y_cell] == NULL) {
                 if (sketch_name_ == "CM" || sketch_name_ == "CML2") {
