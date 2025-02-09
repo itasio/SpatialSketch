@@ -158,8 +158,8 @@ bool Messenger::sendKafkaMsg(const std::string &message, const std::string &topi
 }
 
 std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg() {
-    // std::this_thread::sleep_for(std::chrono::seconds(1));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001 or message isn't ready at the topic yet
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
+    std::this_thread::sleep_for(std::chrono::seconds(1));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001 or message isn't ready at the topic yet
+    // std::this_thread::sleep_for(std::chrono::milliseconds(500));   //todo wait for offsets to be ready, otherwise it gets RD_KAFKA_OFFSET_INVALID -1001
     std::pair<long, std::string> est_key;
 
     int64_t low, high;
