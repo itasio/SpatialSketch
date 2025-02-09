@@ -198,9 +198,24 @@ std::optional<std::pair<long, std::string>> Messenger::consumeKafkaMsg() {
         std::cout << "Received: " << payload << std::endl;
         // consumer->commitSync();
         json jmsg = json::parse(payload);
-        long est = jmsg["estimation"];
         if (jmsg.contains("estimation") && jmsg.contains("param")){
-            long est = jmsg["estimation"];
+            long est ;
+            if (jmsg["estimation"].is_number_integer()) {
+                est = jmsg["estimation"].get<long>();
+            } else if (jmsg["estimation"].is_number_float()) {
+                est = static_cast<long>(jmsg["estimation"].get<double>());
+            } else if (jmsg["estimation"].is_string()) {
+                try {
+                    est = std::stol(jmsg["estimation"].get<std::string>());
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: The string estimation returned from SDE couldn't be converted to long " << e.what() << '\n';
+                    return std::nullopt;
+                }
+            } else {
+                std::cerr << "Error: The type of estimation returned from SDE is unsupported \n";
+                return std::nullopt;
+            }
+
             std::string key_queried = jmsg["param"][0];
             est_key = {est, key_queried};
         }else{
