@@ -226,6 +226,7 @@ class SpatialSketch {
         sde_sketch* InitSdeSketch(int key, int x_cell, int y_cell);
         request CreateRequest(std::vector<sde_sketch> sketches, int type_of_rq, std::string key_to_query = "");
         void FindSketchesInRange(std::vector<sde_sketch>* sk_for_est, std::vector<range> ranges);
+        int QuerySDE(std::vector<range> ranges, long item);
 
         // Grid / layer dropping variables
         int diag_exponent_ = 1;  // The combined exponent of the diagonal layer resolution to be dropped, first grids to drop are g(2^1, 2^0) and g(2^0, 2^1), where exponent sum is odd

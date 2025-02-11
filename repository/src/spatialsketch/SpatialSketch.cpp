@@ -460,6 +460,33 @@ void SpatialSketch::FindSketchesInRange(std::vector<sde_sketch>* sk_for_est, std
     }
 }
 
+int SpatialSketch::QuerySDE(std::vector<range> ranges, long item)
+{
+    std::vector<sde_sketch> sk_for_est;
+    FindSketchesInRange(&sk_for_est, ranges);
+    if (sk_for_est.empty()){
+        std::cout << "No sketches exist for given ranges."<<std::endl;
+        return 0;
+    }
+    std::string item_str = to_string(item);
+    request est_rq = CreateRequest(sk_for_est, RQ_ID_EST_MANY_SYN, item_str);
+    if(!mes_->sendRequest(est_rq)){
+        throw std::runtime_error("Can't send query synopsis request. An error occured while sending message to SDE.");
+    }
+    //send estimate request message to SDE
+    auto est_key = mes_->receiveEstimation();
+    if (!est_key){
+        std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
+        return 0;
+    }else if (est_key->second != item_str){
+        std::cout << "Query for key: "<<item_str <<" returned estimation for key: "<< est_key->second <<std::endl;
+        return 0;
+    }
+    // return (int) (di.coverage * est_key->first);    
+    return (int) est_key->first;    //todo what about coverage (na ginei sto sde)
+    // todo xreiazetai na kanw delete vector ?
+}
+
 sde_sketch *SpatialSketch::InitSdeSketch(int key, int x_cell, int y_cell){
     sde_sketch * sk = new sde_sketch;
     std::string gridKey = to_string(key);
@@ -1095,31 +1122,8 @@ int SpatialSketch::QueryRanges(std::vector<range> ranges, long item, long item_e
 
 int SpatialSketch::QueryFrequency(std::vector<range> ranges, long item, long item_end, int timestamp) {
     if (isMessengerUsed()){
-        std::vector<sde_sketch> sk_for_est;
-        FindSketchesInRange(&sk_for_est, ranges);
-        if (sk_for_est.empty()){
-            std::cout << "No sketches exist for given ranges."<<std::endl;
-            return 0;
-        }
-        std::string item_str = to_string(item);
-        request est_rq = CreateRequest(sk_for_est, RQ_ID_EST_MANY_SYN, item_str);
-        if(!mes_->sendRequest(est_rq)){
-            throw std::runtime_error("Can't send query synopsis request. An error occured while sending message to SDE.");
-        }
-            //send estimate request message to SDE
-        auto est_key = mes_->receiveEstimation();
-        if (!est_key){
-            std::cout << "An error occured while querying SDE synopsis with datasetKey: "<< est_rq.DataSetkey <<std::endl;
-            return 0;
-        }else if (est_key->second != item_str){
-            std::cout << "Query for key: "<<item_str <<" returned estimation for key: "<< est_key->second <<std::endl;
-            return 0;
-        }
-        // return (int) (di.coverage * est_key->first);    
-        return (int) est_key->first;    //todo what about coverage (na ginei sto sde)
-
+        return QuerySDE(ranges, item);
     }
-
     int sum = 0, subqueries = 0;
     std::pair<int, int> index;
     std::vector<dyadic2D> dyadic_intervals;
@@ -1341,15 +1345,15 @@ int SpatialSketch::RecurseQueryDyadicIntervalMembership(dyadic2D d_interval, lon
 }
 
 int SpatialSketch::QueryMembership(std::vector<range> ranges, long item) {
+    if (isMessengerUsed()){
+        return QuerySDE(ranges, item);
+    }
     int sum = 0, subqueries = 0;
     std::pair<int, int> index;
     std::vector<dyadic2D> dyadic_intervals;
     dyadic_intervals.reserve(levels_*levels_);
 
-    if (!isMessengerUsed())
-    {
-        nr_hashes_ = sketch_->repetitions_; //GetItemHashes(item, hashes_);
-    }
+    nr_hashes_ = sketch_->repetitions_; //GetItemHashes(item, hashes_);
     
 
     // Query the sketch of every dyadic interval and accumulate the sum
